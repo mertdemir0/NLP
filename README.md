@@ -83,6 +83,9 @@ NLP/
 │   └── setup_env.sh   # Environment setup
 │
 ├── src/                # Source code
+│   ├── __init__.py
+│   ├── main.py        # Main application entry point
+│   │
 │   ├── analysis/      # Analysis modules
 │   │   ├── __init__.py
 │   │   ├── base_analyzer.py
@@ -99,7 +102,10 @@ NLP/
 │   │
 │   ├── data_ingestion/  # Data ingestion
 │   │   ├── __init__.py
-│   │   └── bloomberg_client.py
+│   │   ├── bloomberg_client.py
+│   │   ├── html_parser.py
+│   │   ├── ingestion.py
+│   │   └── pdf_parser.py
 │   │
 │   ├── models/        # Model implementations
 │   │   └── nuclear_bert.py
@@ -110,10 +116,30 @@ NLP/
 │   ├── optimization/  # Performance optimization
 │   │   └── performance.py
 │   │
+│   ├── preprocessing/  # Text preprocessing
+│   │   ├── __init__.py
+│   │   └── text_cleaner.py
+│   │
 │   ├── training/      # Training pipelines
 │   │   └── continuous_learning.py
 │   │
-│   └── __init__.py
+│   ├── utils/         # Utility functions
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   └── logger.py
+│   │
+│   └── visualization/  # Visualization tools
+│       ├── __init__.py
+│       ├── dashboard.py
+│       └── report_generator.py
+│
+├── templates/          # Report templates
+│   ├── report_template.html
+│   └── report_template.md
+│
+├── tests/             # Test suite
+│   └── data_ingestion/
+│       └── test_bloomberg_client.py
 │
 ├── .env.example       # Example environment variables
 ├── README.md         # This file
