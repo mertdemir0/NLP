@@ -1,0 +1,43 @@
+# Core NLP Libraries
+transformers>=4.30.0
+torch>=2.0.0
+spacy>=3.5.0
+nltk>=3.8.1
+gensim>=4.3.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+python-docx>=0.8.11
+PyPDF2>=3.0.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+requests>=2.31.0
+aiohttp>=3.8.0
+python-dateutil>=2.8.2
+
+# Machine Learning
+scikit-learn>=1.2.0
+sentence-transformers>=2.2.0
+bertopic>=0.15.0  # For dynamic topic modeling
+umap-learn>=0.5.3
+hdbscan>=0.8.29
+
+# Visualization
+plotly>=5.14.0
+dash>=2.9.0
+wordcloud>=1.9.0
+folium>=0.14.0  # For geographic visualizations
+networkx>=3.1  # For network analysis
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
+tqdm>=4.65.0
+joblib>=1.2.0
+tenacity>=8.2.2  # For API rate limiting and retries
+aiofiles>=23.1.0  # For async file operations
+
+# Optional Dependencies
+# cuda-python>=12.0  # Uncomment for GPU support
+# pytorch-cuda>=2.0  # Uncomment for GPU support

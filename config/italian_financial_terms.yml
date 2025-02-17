@@ -1,0 +1,46 @@
+# Italian Financial Terms Configuration
+
+# Banking Terms
+banking:
+  - bilancio: balance sheet
+  - prestito: loan
+  - tasso di interesse: interest rate
+  - mutuo: mortgage
+  - deposito: deposit
+  - conto corrente: current account
+
+# Market Terms
+market:
+  - borsa: stock exchange
+  - azioni: stocks/shares
+  - obbligazioni: bonds
+  - mercato azionario: stock market
+  - dividendo: dividend
+  - rendimento: yield
+
+# Financial Indicators
+indicators:
+  - PIL: GDP
+  - inflazione: inflation
+  - deflazione: deflation
+  - tasso di cambio: exchange rate
+  - spread: spread
+  - volatilità: volatility
+
+# Corporate Terms
+corporate:
+  - fatturato: turnover/revenue
+  - utile: profit
+  - perdita: loss
+  - patrimonio netto: net worth
+  - investimento: investment
+  - capitale sociale: share capital
+
+# Risk Terms
+risk:
+  - rischio: risk
+  - copertura: hedge
+  - garanzia: guarantee
+  - assicurazione: insurance
+  - default: default
+  - insolvenza: insolvency

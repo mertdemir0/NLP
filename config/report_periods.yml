@@ -1,0 +1,46 @@
+# Report Periods Configuration
+
+# Time Periods
+periods:
+  - name: daily
+    format: "%Y-%m-%d"
+    aggregation: "1D"
+    
+  - name: weekly
+    format: "%Y-W%W"
+    aggregation: "1W"
+    
+  - name: monthly
+    format: "%Y-%m"
+    aggregation: "1M"
+    
+  - name: quarterly
+    format: "%Y-Q%q"
+    aggregation: "3M"
+    
+  - name: yearly
+    format: "%Y"
+    aggregation: "1Y"
+
+# Date Parsing
+date_formats:
+  - "%Y-%m-%d"
+  - "%d/%m/%Y"
+  - "%Y/%m/%d"
+  - "%d-%m-%Y"
+  - "%B %d, %Y"
+  - "%d %B %Y"
+
+# Time Windows
+time_windows:
+  recent: "30D"
+  medium_term: "90D"
+  long_term: "365D"
+  custom: null  # Can be set dynamically
+
+# Report Settings
+settings:
+  default_period: "monthly"
+  include_weekends: false
+  timezone: "Europe/Rome"
+  date_locale: "it_IT"

@@ -1,0 +1,100 @@
+# NLP Project Configuration
+
+# Model Settings
+model:
+  name: "bert-base-uncased"
+  cache_dir: "./cache/transformers"
+  max_length: 512
+  batch_size: 32
+  num_workers: 4
+
+# Bloomberg API Settings
+bloomberg:
+  start_date: "2020-01-01"
+  end_date: "2025-02-17"  # Current date
+  topics:
+    - "nuclear energy"
+    - "nuclear power"
+    - "small modular reactor"
+    - "SMR"
+    - "nuclear fusion"
+    - "Generation III reactor"
+    - "Generation IV reactor"
+  api:
+    base_url: "https://www.bloomberg.com/api/v1"
+    articles_endpoint: "/articles/search"
+    max_results_per_page: 100
+    rate_limit: 10  # requests per second
+
+# Data Processing
+data:
+  input_dir: "./data/raw"
+  output_dir: "./data/processed"
+  cache_dir: "./cache"
+  supported_formats:
+    - ".txt"
+    - ".pdf"
+    - ".html"
+    - ".doc"
+    - ".docx"
+    - ".json"
+
+# Analysis Settings
+analysis:
+  sentiment:
+    model: "distilbert-base-uncased-finetuned-sst-2-english"
+    threshold: 0.5
+  topic_modeling:
+    num_topics: 10
+    algorithm: "lda"  # options: lda, nmf
+  keyword_extraction:
+    max_keywords: 20
+    min_word_length: 3
+  semantic:
+    similarity_threshold: 0.7
+    embeddings_model: "sentence-transformers/all-MiniLM-L6-v2"
+  temporal:
+    granularity: "monthly"
+    metrics:
+      - "article_count"
+      - "sentiment_score"
+      - "topic_distribution"
+  geographical:
+    granularity: "country"
+    region_grouping: true
+  technology_classification:
+    categories:
+      - name: "SMR"
+        keywords: ["small modular reactor", "SMR", "small nuclear"]
+      - name: "Generation III"
+        keywords: ["Gen III", "Generation III", "EPR", "AP1000"]
+      - name: "Generation IV"
+        keywords: ["Gen IV", "Generation IV", "fast breeder", "molten salt"]
+      - name: "Fusion"
+        keywords: ["fusion", "tokamak", "ITER", "magnetic confinement"]
+
+# Visualization
+visualization:
+  dashboard:
+    host: "localhost"
+    port: 8050
+    debug: true
+  plots:
+    theme: "plotly_white"
+    color_palette: ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    default_height: 600
+    default_width: 1000
+
+# Logging
+logging:
+  level: "INFO"
+  file: "./logs/app.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  rotation: "1 MB"
+
+# Performance
+performance:
+  chunk_size: 1000
+  max_documents: 10000
+  use_gpu: false
+  memory_limit: "4GB"
