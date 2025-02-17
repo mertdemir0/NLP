@@ -1,0 +1,36 @@
+# Bloomberg API Configuration
+
+# Connection settings
+bloomberg_host: localhost
+bloomberg_port: 8194
+
+# Authentication (if required)
+bloomberg_auth:
+  username: ${BLOOMBERG_USERNAME}
+  password: ${BLOOMBERG_PASSWORD}
+
+# News search settings
+news_search:
+  topics:
+    - "nuclear energy"
+    - "nuclear power"
+    - "nuclear reactor"
+    - "nuclear plant"
+    - "nuclear technology"
+    - "nuclear waste"
+    - "nuclear safety"
+    - "nuclear policy"
+    - "nuclear regulation"
+  max_articles_per_request: 1000
+  default_date_range_days: 30
+
+# Market data settings
+market_data:
+  securities:
+    - "NUCLEAR INDEX"
+    - "NUCLEAR ENERGY COMPANIES"
+  fields:
+    - "PX_LAST"
+    - "VOLUME"
+    - "NEWS_SENTIMENT"
+  update_interval_ms: 5000
