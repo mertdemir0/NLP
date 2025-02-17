@@ -1,90 +1,61 @@
-# Nuclear Energy Content Analysis
+# Nuclear Energy Sentiment Analysis System
 
-A comprehensive Natural Language Processing (NLP) toolkit for analyzing nuclear energy-related articles, providing various text analysis capabilities including sentiment analysis, topic modeling, semantic analysis, temporal analysis, and geographical analysis.
+A sophisticated natural language processing system for analyzing nuclear energy-related content using advanced deep learning techniques and continuous learning.
 
-## Table of Contents
-1. [Overview](#overview)
-2. [Project Structure](#project-structure)
-3. [Features](#features)
-4. [Installation](#installation)
-5. [Configuration](#configuration)
-6. [Usage](#usage)
-7. [Components](#components)
-8. [Testing](#testing)
-9. [Documentation](#documentation)
-10. [Contributing](#contributing)
+## 🚀 Features
 
-## Overview
+### Advanced Sentiment Analysis
+- Custom BERT model fine-tuned for nuclear energy domain
+- Multi-lingual support (EN, FR, DE, ES, IT)
+- Aspect-based sentiment analysis:
+  - Safety
+  - Cost
+  - Environmental impact
+  - Technology
+  - Policy
+  - Public opinion
 
-The Nuclear Energy Content Analysis project is a comprehensive NLP pipeline designed to analyze nuclear energy-related articles from Bloomberg. The system performs various types of analysis including sentiment analysis, topic modeling, semantic analysis, temporal analysis, and geographical analysis.
+### Continuous Learning
+- Automated model retraining
+- Data quality validation
+- Performance monitoring
+- MLflow experiment tracking
+- Model versioning
 
-## Project Structure
+### Data Processing
+- Multi-source content extraction
+- Advanced text cleaning
+- Parallel processing
+- Efficient storage with Elasticsearch
+- Redis caching for fast access
 
-```
-├── config/           # Configuration files
-├── data/            # Data storage directory
-├── docs/            # Documentation files
-├── scripts/         # Utility scripts
-├── src/             # Source code
-│   ├── analysis/    # Text analysis modules
-│   │   ├── keyword_extraction.py
-│   │   ├── semantic_analysis.py
-│   │   ├── sentiment_analysis.py
-│   │   ├── temporal_analysis.py
-│   │   ├── geo_analysis.py
-│   │   └── topic_modeling.py
-│   ├── data_ingestion/  # Data input handling
-│   │   ├── html_parser.py
-│   │   ├── ingestion.py
-│   │   └── pdf_parser.py
-│   ├── preprocessing/   # Text preprocessing
-│   │   ├── text_cleaner.py
-│   │   ├── tokenizer.py
-│   │   └── normalizer.py
-│   ├── utils/          # Utility functions
-│   │   ├── config.py
-│   │   └── logger.py
-│   └── visualization/  # Data visualization
-│       ├── dashboard.py
-│       └── report_generator.py
-└── tests/           # Test files
-```
+### Quality Monitoring
+- Real-time metrics tracking
+- Data drift detection
+- Automated alerts
+- Performance monitoring
+- Prometheus/Grafana dashboards
 
-## Features
+### Performance Optimization
+- Mixed precision training
+- Batch processing
+- Distributed computing
+- Resource monitoring
+- Caching strategies
 
-- **Data Ingestion**: 
-  - Support for multiple input formats (HTML, PDF)
-  - URL content fetching
-  - Metadata extraction
-  - Concurrent processing
+## 🛠 Installation
 
-- **Text Analysis**:
-  - Sentiment Analysis
-  - Topic Modeling
-  - Semantic Analysis
-  - Temporal Analysis
-  - Geographical Analysis
-  - Keyword Extraction
+### Prerequisites
+- Python 3.9+
+- Docker
+- CUDA-capable GPU (recommended)
 
-- **Text Preprocessing**: 
-  - Text cleaning
-  - Tokenization
-  - Normalization
-  - Noise removal
-
-- **Visualization**: 
-  - Interactive Dash Dashboard
-  - Geographical heatmaps
-  - Temporal charts
-  - Technology distribution visualizations
-  - Report generation in multiple formats
-
-## Installation
+### Setup
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/mertdemir0/NLP.git
-cd NLP
+git clone https://github.com/yourusername/nuclear-sentiment
+cd nuclear-sentiment
 ```
 
 2. Create a virtual environment:
@@ -98,83 +69,142 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Configuration
+4. Start required services:
+```bash
+# Start Elasticsearch
+docker run -d -p 9200:9200 -e "discovery.type=single-node" elasticsearch:8.11.0
 
-The system is configured through files in the `config/` directory:
+# Start Redis
+docker run -d -p 6379:6379 redis:5.0.1
 
-- `config.yaml`: Main configuration file
-- `country_coordinates.json`: Geographical coordinates for location analysis
+# Start MLflow
+mlflow server --host 0.0.0.0 --port 5000
 
-### Environment Variables
+# Start Prometheus
+prometheus --config.file=prometheus.yml
+```
 
-Create a `.env` file based on `.env.example`:
+5. Configure environment variables:
 ```bash
 cp .env.example .env
+# Edit .env with your configuration
 ```
 
-Required environment variables:
-- `BLOOMBERG_API_KEY`: Your Bloomberg API key
-- `LOG_LEVEL`: Logging level (default: INFO)
+## 📊 Usage
 
-## Usage
+### Basic Usage
 
-### Command Line Interface
+```python
+from src.models.nuclear_bert import NuclearBERTModel
+from src.data.processor import DataProcessor
 
-Run the complete pipeline:
+# Initialize model and processor
+model = NuclearBERTModel()
+processor = DataProcessor()
+
+# Analyze sentiment
+text = "Nuclear energy plays a crucial role in reducing carbon emissions."
+result = model.predict(text)
+print(f"Overall sentiment: {result.sentiment}")
+print(f"Aspect sentiments: {result.aspects}")
+```
+
+### Continuous Learning
+
+```python
+from src.training.continuous_learning import ContinuousLearningPipeline
+
+# Initialize pipeline
+pipeline = ContinuousLearningPipeline()
+
+# Start continuous learning
+await pipeline.run()
+```
+
+### Monitoring
+
+```python
+from src.monitoring.quality_monitor import QualityMonitor
+
+# Initialize monitor
+monitor = QualityMonitor()
+
+# Check data quality
+metrics = await monitor.check_data_quality(data)
+print(f"Quality metrics: {metrics}")
+```
+
+## 📈 Dashboards
+
+### Grafana Dashboards
+- Model Performance: `http://localhost:3000/d/model-performance`
+- Data Quality: `http://localhost:3000/d/data-quality`
+- System Metrics: `http://localhost:3000/d/system-metrics`
+
+### MLflow UI
+Access experiment tracking at `http://localhost:5000`
+
+## 🔧 Configuration
+
+### Model Configuration
+Edit `config/model_config.yaml` to configure:
+- Model architecture
+- Training parameters
+- Inference settings
+
+### System Configuration
+Edit `config/system_config.yaml` to configure:
+- Data processing
+- Monitoring
+- Alerts
+- Performance optimization
+
+## 📝 Documentation
+
+Detailed documentation is available in the `docs` directory:
+- [API Reference](docs/API.md)
+- [Model Architecture](docs/MODEL.md)
+- [Data Processing](docs/DATA_PROCESSING.md)
+- [Monitoring](docs/MONITORING.md)
+- [Configuration Guide](docs/CONFIGURATION.md)
+
+## 🧪 Testing
+
+Run tests:
 ```bash
-python -m src.main --config config/config.yaml --input-dir data/raw --output-dir output --dashboard
+# Run all tests
+pytest
+
+# Run specific test suite
+pytest tests/models/test_nuclear_bert.py
 ```
 
-Options:
-- `--config`: Path to configuration file
-- `--input-dir`: Directory containing input files
-- `--output-dir`: Directory for output files
-- `--log-level`: Logging level
-- `--dashboard`: Launch interactive dashboard
+## 📊 Performance
 
-### Interactive Dashboard
+### Hardware Requirements
+- Minimum: 16GB RAM, 4 CPU cores
+- Recommended: 32GB RAM, 8 CPU cores, NVIDIA GPU with 8GB+ VRAM
 
-Launch the dashboard:
-```bash
-python -m src.visualization.dashboard
-```
+### Benchmarks
+- Processing Speed: ~1000 articles/minute
+- Model Inference: ~100ms/article
+- Training: ~2 hours/epoch on recommended hardware
 
-## Components
+## 🤝 Contributing
 
-### 1. Data Ingestion
-- PDF document parsing
-- HTML content extraction
-- URL content fetching
-- Metadata extraction
+1. Fork the repository
+2. Create your feature branch
+3. Make your changes
+4. Submit a pull request
 
-### 2. Analysis
-- Sentiment Analysis
-- Topic Modeling
-- Semantic Analysis
-- Temporal Analysis
-- Geographical Analysis
+## 📄 License
 
-### 3. Visualization
-- Interactive Dashboard
-- Report Generation
-- Data Export
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
-## Testing
+## 🙏 Acknowledgments
 
-The project includes a comprehensive test suite in the `tests/` directory to ensure code quality and functionality. Run tests using:
-
-```bash
-pytest tests/
-```
-
-## Documentation
-
-Detailed documentation is available in the `docs/` directory:
-- `API.md`: Complete API reference
-- `CONTRIBUTING.md`: Contributing guidelines
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](docs/CONTRIBUTING.md) for details on how to submit pull requests, report issues, and contribute to the project.
-
-For API documentation and detailed examples, please refer to our [API Reference](docs/API.md).
+- Bloomberg API for data access
+- Hugging Face for transformer models
+- ElasticSearch for efficient storage
+- Redis for caching
+- Prometheus/Grafana for monitoring
