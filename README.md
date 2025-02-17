@@ -46,92 +46,78 @@ A sophisticated natural language processing system for analyzing nuclear energy-
 ## 📁 Project Structure
 
 ```
-nuclear-sentiment/
-├── config/                     # Configuration files
-│   ├── bloomberg_config.yaml   # Bloomberg API configuration
-│   ├── model_config.yaml       # Model parameters
-│   ├── monitoring_config.yaml  # Monitoring settings
-│   └── system_config.yaml      # System-wide settings
+NLP/
+├── cache/                    # Cache directory
+│   ├── bloomberg/           # Bloomberg API cache
+│   └── models/              # Model cache
 │
-├── data/                       # Data directory
-│   ├── raw/                   # Raw article data
-│   ├── processed/             # Processed articles
-│   └── models/                # Trained model checkpoints
+├── config/                   # Configuration files
+│   ├── bloomberg_config.yaml # Bloomberg API configuration
+│   ├── config.yaml          # Main configuration
+│   ├── country_coordinates.json  # Geographical data
+│   ├── italian_financial_terms.yml  # Financial terms
+│   ├── report_periods.yml   # Reporting periods
+│   └── requirements.txt     # Config-specific requirements
 │
-├── docs/                      # Documentation
-│   ├── API.md                # API reference
-│   ├── BLOOMBERG.md          # Bloomberg integration guide
-│   ├── DATA_PROCESSING.md    # Data processing documentation
-│   ├── MODEL.md              # Model architecture details
-│   ├── MONITORING.md         # Monitoring system guide
-│   └── CONFIGURATION.md      # Configuration guide
+├── data/                    # Data directory
+│   ├── processed/          # Processed data
+│   └── raw/               # Raw data
 │
-├── notebooks/                 # Jupyter notebooks
-│   ├── analysis/             # Analysis notebooks
-│   ├── experiments/          # Experiment notebooks
-│   └── visualization/        # Visualization notebooks
+├── docs/                   # Documentation
+│   ├── API.md             # API reference
+│   ├── BLOOMBERG.md       # Bloomberg integration guide
+│   ├── CONTRIBUTING.md    # Contributing guidelines
+│   ├── architecture.md    # System architecture
+│   ├── changelog.md       # Version history
+│   ├── requirements.md    # Requirements documentation
+│   └── user_guide.md     # User guide
 │
-├── src/                      # Source code
-│   ├── data/                 # Data processing
+├── logs/                  # Log files
+│
+├── output/               # Output directory
+│   ├── figures/         # Generated figures
+│   └── reports/        # Generated reports
+│
+├── scripts/             # Utility scripts
+│   ├── run_pipeline.sh # Pipeline execution
+│   └── setup_env.sh   # Environment setup
+│
+├── src/                # Source code
+│   ├── analysis/      # Analysis modules
 │   │   ├── __init__.py
-│   │   ├── processor.py      # Main data processor
-│   │   ├── cleaner.py       # Text cleaning utilities
-│   │   └── loader.py        # Data loading utilities
+│   │   ├── base_analyzer.py
+│   │   ├── geo_analysis.py
+│   │   ├── geopolitical_context.py
+│   │   ├── keyword_extraction.py
+│   │   ├── semantic_analysis.py
+│   │   ├── sentiment_analysis.py
+│   │   ├── temporal_analysis.py
+│   │   └── topic_modeling.py
 │   │
-│   ├── models/              # Model implementations
+│   ├── data/          # Data processing
+│   │   └── processor.py
+│   │
+│   ├── data_ingestion/  # Data ingestion
 │   │   ├── __init__.py
-│   │   ├── nuclear_bert.py  # Nuclear BERT model
-│   │   └── embeddings.py    # Custom embeddings
+│   │   └── bloomberg_client.py
 │   │
-│   ├── training/            # Training pipelines
-│   │   ├── __init__.py
-│   │   ├── continuous_learning.py  # Continuous learning
-│   │   └── trainer.py      # Base trainer
+│   ├── models/        # Model implementations
+│   │   └── nuclear_bert.py
 │   │
-│   ├── monitoring/         # Monitoring system
-│   │   ├── __init__.py
-│   │   ├── quality_monitor.py  # Quality monitoring
-│   │   └── alerts.py      # Alert system
+│   ├── monitoring/    # Monitoring system
+│   │   └── quality_monitor.py
 │   │
-│   ├── optimization/      # Performance optimization
-│   │   ├── __init__.py
-│   │   ├── performance.py # Performance utilities
-│   │   └── caching.py    # Caching system
+│   ├── optimization/  # Performance optimization
+│   │   └── performance.py
 │   │
-│   ├── visualization/     # Visualization tools
-│   │   ├── __init__.py
-│   │   ├── dashboards.py # Grafana dashboards
-│   │   └── plots.py     # Plotting utilities
+│   ├── training/      # Training pipelines
+│   │   └── continuous_learning.py
 │   │
-│   └── utils/            # Utility functions
-│       ├── __init__.py
-│       ├── config.py    # Configuration utilities
-│       ├── logger.py    # Logging setup
-│       └── metrics.py   # Evaluation metrics
+│   └── __init__.py
 │
-├── tests/               # Test suite
-│   ├── data/           # Data processing tests
-│   ├── models/         # Model tests
-│   ├── training/       # Training tests
-│   ├── monitoring/     # Monitoring tests
-│   └── optimization/   # Performance tests
-│
-├── docker/             # Docker configuration
-│   ├── Dockerfile     # Main application
-│   ├── docker-compose.yml  # Service orchestration
-│   └── prometheus/    # Prometheus configuration
-│
-├── scripts/           # Utility scripts
-│   ├── setup.sh      # Setup script
-│   ├── train.sh      # Training script
-│   └── deploy.sh     # Deployment script
-│
-├── .env.example      # Example environment variables
-├── .gitignore       # Git ignore rules
-├── LICENSE         # License file
-├── README.md       # This file
-├── requirements.txt # Python dependencies
-└── setup.py       # Package setup file
+├── .env.example       # Example environment variables
+├── README.md         # This file
+└── requirements.txt  # Python dependencies
 ```
 
 ## 🛠 Installation
