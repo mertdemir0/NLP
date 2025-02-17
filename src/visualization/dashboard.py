@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 import pandas as pd
 import yaml
 from dotenv import load_dotenv
+import json
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
@@ -27,13 +29,21 @@ class NuclearEnergyDashboard:
         """
         self.config = self._load_config(config_path)
         self.app = dash.Dash(__name__)
+        self.country_coords = self._load_country_coordinates()
         self.setup_layout()
+        self._setup_callbacks()
         
     @staticmethod
     def _load_config(config_path: str) -> Dict[str, Any]:
         """Load configuration from YAML file."""
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)
+    
+    def _load_country_coordinates(self) -> Dict[str, List[float]]:
+        """Load country coordinates for geographical visualization."""
+        coords_file = Path(__file__).parent.parent / "analysis" / "data" / "country_coordinates.json"
+        with open(coords_file, 'r') as f:
+            return json.load(f)
     
     def load_data(self, results_dir: str = "output") -> None:
         """Load analysis results."""
@@ -100,10 +110,83 @@ class NuclearEnergyDashboard:
             
             # Geographical distribution
             html.Div([
-                html.H3("Geographical Focus"),
-                dcc.Graph(id='geo-chart')
+                html.H3("Geographical Analysis"),
+                html.Div([
+                    html.Div([
+                        html.H4("Location Mentions Over Time"),
+                        dcc.Graph(id='geo-temporal-chart')
+                    ], className='six columns'),
+                    html.Div([
+                        html.H4("Location Distribution"),
+                        dcc.Graph(id='geo-dist-chart')
+                    ], className='six columns'),
+                ], className='row'),
+                html.Div([
+                    html.H4("Geographical Heatmap"),
+                    dcc.Graph(id='geo-heatmap')
+                ]),
+                html.Div([
+                    html.H4("Location Context Analysis"),
+                    dcc.Dropdown(
+                        id='location-selector',
+                        placeholder='Select a location to analyze...'
+                    ),
+                    html.Div(id='location-context')
+                ])
             ])
         ])
+    
+    def _setup_callbacks(self):
+        """Set up dashboard callbacks."""
+        @self.app.callback(
+            [Output('geo-temporal-chart', 'figure'),
+             Output('geo-dist-chart', 'figure'),
+             Output('geo-heatmap', 'figure'),
+             Output('location-selector', 'options')],
+            [Input('date-range', 'start_date'),
+             Input('date-range', 'end_date'),
+             Input('technology-filter', 'value')]
+        )
+        def update_geo_charts(start_date, end_date, selected_techs):
+            # Filter data based on date range and technologies
+            filtered_data = self._filter_data(start_date, end_date, selected_techs)
+            
+            # Create temporal chart
+            temporal_fig = self.create_geo_temporal_chart(filtered_data)
+            
+            # Create distribution chart
+            dist_fig = self.create_geo_distribution_chart(filtered_data)
+            
+            # Create heatmap
+            heatmap_fig = self.create_geo_heatmap(filtered_data)
+            
+            # Update location selector options
+            location_options = [
+                {'label': loc, 'value': loc}
+                for loc in filtered_data.get('location_counts', {}).keys()
+            ]
+            
+            return temporal_fig, dist_fig, heatmap_fig, location_options
+
+        @self.app.callback(
+            Output('location-context', 'children'),
+            [Input('location-selector', 'value')]
+        )
+        def update_location_context(selected_location):
+            if not selected_location:
+                return html.Div("Select a location to view its analysis")
+            
+            context_data = self.data.get('location_contexts', {}).get(selected_location, {})
+            
+            return html.Div([
+                html.P(f"Total Mentions: {context_data.get('mention_count', 0)}"),
+                html.P(f"Average Sentiment: {context_data.get('sentiment', {}).get('mean', 0):.2f}"),
+                html.H5("Associated Technologies:"),
+                html.Ul([
+                    html.Li(f"{tech}: {count}")
+                    for tech, count in context_data.get('technologies', {}).items()
+                ])
+            ])
     
     def create_volume_chart(self, df: pd.DataFrame) -> go.Figure:
         """Create content volume over time chart."""
@@ -136,6 +219,86 @@ class NuclearEnergyDashboard:
             title='Sentiment Distribution by Technology',
             template=self.config['visualization']['plots']['theme']
         )
+        return fig
+    
+    def create_geo_temporal_chart(self, data: Dict) -> go.Figure:
+        """Create temporal chart of location mentions."""
+        df = pd.DataFrame([
+            {'date': date, 'location': loc, 'count': count}
+            for date, locs in data.get('temporal_locations', {}).items()
+            for loc, count in locs.items()
+        ])
+        
+        fig = px.line(
+            df,
+            x='date',
+            y='count',
+            color='location',
+            title='Location Mentions Over Time',
+            template=self.config['visualization']['plots']['theme']
+        )
+        return fig
+    
+    def create_geo_distribution_chart(self, data: Dict) -> go.Figure:
+        """Create geographical distribution chart."""
+        df = pd.DataFrame([
+            {'location': loc, 'count': count}
+            for loc, count in data.get('location_counts', {}).items()
+        ])
+        
+        fig = px.bar(
+            df,
+            x='location',
+            y='count',
+            title='Distribution of Location Mentions',
+            template=self.config['visualization']['plots']['theme']
+        )
+        fig.update_layout(xaxis_tickangle=-45)
+        return fig
+    
+    def create_geo_heatmap(self, data: Dict) -> go.Figure:
+        """Create geographical heatmap."""
+        locations = []
+        counts = []
+        texts = []
+        
+        for loc, count in data.get('location_counts', {}).items():
+            if loc in self.country_coords:
+                locations.append(loc)
+                counts.append(count)
+                texts.append(f"{loc}: {count} mentions")
+        
+        lats = [self.country_coords[loc][0] for loc in locations]
+        lons = [self.country_coords[loc][1] for loc in locations]
+        
+        fig = go.Figure(data=go.Scattergeo(
+            lon=lons,
+            lat=lats,
+            text=texts,
+            mode='markers',
+            marker=dict(
+                size=[min(count * 2, 20) for count in counts],
+                color=counts,
+                colorscale='Viridis',
+                showscale=True,
+                colorbar_title="Mention Count"
+            )
+        ))
+        
+        fig.update_layout(
+            title='Geographical Distribution of Nuclear Energy Coverage',
+            geo=dict(
+                showland=True,
+                showcountries=True,
+                showocean=True,
+                countrywidth=0.5,
+                landcolor='rgb(243, 243, 243)',
+                oceancolor='rgb(204, 229, 255)',
+                projection_scale=1.2
+            ),
+            template=self.config['visualization']['plots']['theme']
+        )
+        
         return fig
     
     def run(self) -> None:
