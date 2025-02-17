@@ -57,14 +57,33 @@ data_ingestion:
   max_historical_days: 365
   
   news:
-    languages: ["EN", "FR", "DE"]
-    max_articles_per_request: 10000
+    languages: ["EN", "FR", "DE", "ES", "IT"]
+    max_articles_per_request: 50000
+    batch_size: 1000
+    parallel_requests: 8
     sources:
       - "Bloomberg News"
       - "Reuters"
       - "Financial Times"
       - "World Nuclear News"
-    
+      - "Nuclear Engineering International"
+      - "Power Engineering"
+      - "Scientific American"
+      - "Nature Energy"
+    keywords:
+      - "nuclear energy"
+      - "nuclear power"
+      - "nuclear reactor"
+      - "small modular reactor"
+      - "nuclear waste"
+      - "uranium"
+      - "thorium"
+      - "fusion energy"
+    historical_data:
+      enabled: true
+      max_years: 10
+      storage: "elasticsearch"
+
   market_data:
     update_interval_ms: 5000
     fields:
@@ -77,67 +96,138 @@ data_ingestion:
       - "RSI_14D"
       - "MACD"
 
+model:
+  architecture: "nuclear_bert"
+  training:
+    batch_size: 64
+    learning_rate: 2e-5
+    epochs: 3
+    evaluation_steps: 500
+    warmup_steps: 1000
+    gradient_accumulation_steps: 4
+    fp16: true
+    
+  continuous_learning:
+    enabled: true
+    trigger:
+      new_data_threshold: 10000  # articles
+      time_interval: "7d"
+    validation:
+      holdout_size: 0.2
+      min_performance_threshold: 0.85
+    
+  features:
+    text_preprocessing:
+      - remove_boilerplate
+      - clean_html
+      - normalize_whitespace
+      - expand_abbreviations
+    
+    advanced:
+      - entity_recognition
+      - topic_modeling
+      - aspect_based_sentiment
+      - temporal_analysis
+      - cross_lingual_alignment
+
+storage:
+  elasticsearch:
+    indices:
+      raw_articles: "nuclear_news_raw"
+      processed_articles: "nuclear_news_processed"
+      sentiment_results: "nuclear_sentiment"
+      model_metrics: "model_performance"
+    settings:
+      shards: 5
+      replicas: 1
+      refresh_interval: "30s"
+
+  feature_store:
+    type: "redis"
+    ttl: 86400  # 24 hours
+    max_memory: "8gb"
+
 analysis:
   sentiment:
-    model: "finbert-nuclear"
-    batch_size: 32
-    threshold:
-      positive: 0.6
-      negative: 0.4
-    aggregation_intervals:
-      - "hourly"
-      - "daily"
-      - "weekly"
-      - "monthly"
-    
-  forecasting:
     models:
-      - name: "prophet"
-        seasonality_mode: "multiplicative"
-        changepoint_prior_scale: 0.05
-      - name: "lstm"
-        layers: [64, 32]
-        dropout: 0.2
-      - name: "lightgbm"
-        num_leaves: 31
-        learning_rate: 0.05
+      - name: "nuclear_bert"
+        type: "transformer"
+        version: "latest"
+      - name: "nuclear_xlnet"
+        type: "transformer"
+        version: "latest"
+      - name: "ensemble"
+        type: "voting"
+        weights: [0.6, 0.4]
     
-  anomaly_detection:
-    algorithm: "isolation_forest"
-    contamination: 0.1
-    features:
-      - "price"
-      - "volume"
-      - "sentiment"
-      - "volatility"
+    aspects:
+      - "safety"
+      - "cost"
+      - "environmental_impact"
+      - "technology"
+      - "policy"
+      - "public_opinion"
+    
+    aggregations:
+      time_windows:
+        - "hourly"
+        - "daily"
+        - "weekly"
+        - "monthly"
+        - "quarterly"
+      
+      dimensions:
+        - "source"
+        - "language"
+        - "aspect"
+        - "entity"
+        - "topic"
 
 monitoring:
-  metrics:
-    enabled: true
-    prometheus_port: 9090
-    collect_interval_seconds: 60
-    
   logging:
     level: "INFO"
     format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers:
+      - type: "file"
+        filename: "logs/sentiment_analysis.log"
+        max_bytes: 10485760  # 10MB
+        backup_count: 5
+      - type: "elasticsearch"
+        index: "sentiment_logs"
+  
+  metrics:
+    enabled: true
+    collectors:
+      - "model_performance"
+      - "data_quality"
+      - "processing_time"
+      - "api_latency"
     
   alerts:
     channels:
       - type: "email"
         recipients: ["alerts@company.com"]
       - type: "slack"
-        channel: "#nuclear-alerts"
+        channel: "#sentiment-alerts"
     
     rules:
-      - name: "price_spike"
-        condition: "change_percent > 5"
+      - name: "data_quality_drop"
+        condition: "quality_score < 0.9"
         cooldown_minutes: 60
-      - name: "high_volatility"
-        condition: "volatility_10d > 30"
+      - name: "model_performance_degradation"
+        condition: "f1_score < 0.85"
         cooldown_minutes: 120
-      - name: "sentiment_shift"
-        condition: "sentiment_change > 0.3"
-        cooldown_minutes: 30
+      - name: "processing_delay"
+        condition: "lag_minutes > 30"
+        cooldown_minutes: 15
+
+export:
+  formats: ["csv", "xlsx", "json", "parquet"]
+  scheduling:
+    enabled: true
+    cron: "0 0 * * *"  # Daily at midnight
+  compression: true
+  retention_days: 90
 
 visualization:
   dashboard:
