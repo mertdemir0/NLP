@@ -41,7 +41,7 @@ class NuclearEnergyDashboard:
     
     def _load_country_coordinates(self) -> Dict[str, List[float]]:
         """Load country coordinates for geographical visualization."""
-        coords_file = Path(__file__).parent.parent / "analysis" / "data" / "country_coordinates.json"
+        coords_file = Path(__file__).parent.parent / "config" / "country_coordinates.json"
         with open(coords_file, 'r') as f:
             return json.load(f)
     
