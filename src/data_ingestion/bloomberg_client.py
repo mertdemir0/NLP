@@ -3,9 +3,10 @@ Bloomberg API client for fetching nuclear energy related articles and data.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import datetime
 import blpapi
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class BloombergClient:
             self.session_options.setAuthenticationOptions(auth_options)
         
         self.session = None
+        self._market_data_subscriptions = {}
     
     def connect(self) -> bool:
         """
@@ -46,13 +48,17 @@ class BloombergClient:
                 logger.error("Failed to start Bloomberg API session")
                 return False
             
-            if not self.session.openService("//blp/mktdata"):
-                logger.error("Failed to open market data service")
-                return False
+            services = [
+                "//blp/mktdata",
+                "//blp/news",
+                "//blp/refdata",
+                "//blp/apifields"
+            ]
             
-            if not self.session.openService("//blp/news"):
-                logger.error("Failed to open news service")
-                return False
+            for service in services:
+                if not self.session.openService(service):
+                    logger.error(f"Failed to open {service} service")
+                    return False
             
             return True
             
@@ -71,7 +77,8 @@ class BloombergClient:
         topics: List[str],
         start_date: datetime.datetime,
         end_date: Optional[datetime.datetime] = None,
-        max_articles: int = 1000
+        max_articles: int = 1000,
+        languages: Optional[List[str]] = None
     ) -> List[Dict]:
         """
         Fetch news articles related to nuclear energy.
@@ -81,6 +88,7 @@ class BloombergClient:
             start_date: Start date for article search
             end_date: End date for article search (defaults to current time)
             max_articles: Maximum number of articles to fetch
+            languages: List of language codes to filter articles
             
         Returns:
             List of dictionaries containing article data
@@ -100,6 +108,9 @@ class BloombergClient:
             if end_date:
                 request.set("dateTo", end_date.strftime("%Y-%m-%d"))
             request.set("maxResults", max_articles)
+            
+            if languages:
+                request.set("languageOverride", languages)
             
             # Send request
             correlation_id = blpapi.CorrelationId("NewsSearch")
@@ -123,7 +134,173 @@ class BloombergClient:
         except Exception as e:
             logger.error(f"Error fetching news articles: {str(e)}")
             return []
+    
+    def fetch_company_data(
+        self,
+        companies: List[str],
+        fields: List[str],
+        start_date: Optional[datetime.datetime] = None,
+        end_date: Optional[datetime.datetime] = None
+    ) -> pd.DataFrame:
+        """
+        Fetch historical data for nuclear energy companies.
         
+        Args:
+            companies: List of company tickers
+            fields: List of Bloomberg fields to retrieve
+            start_date: Start date for historical data
+            end_date: End date for historical data
+            
+        Returns:
+            DataFrame containing company data
+        """
+        if not self.session:
+            if not self.connect():
+                return pd.DataFrame()
+        
+        try:
+            refdata_service = self.session.getService("//blp/refdata")
+            request = refdata_service.createRequest("HistoricalDataRequest")
+            
+            # Set securities and fields
+            for company in companies:
+                request.getElement("securities").appendValue(company)
+            for field in fields:
+                request.getElement("fields").appendValue(field)
+            
+            # Set date range
+            if start_date:
+                request.set("startDate", start_date.strftime("%Y%m%d"))
+            if end_date:
+                request.set("endDate", end_date.strftime("%Y%m%d"))
+            
+            # Send request
+            self.session.sendRequest(request)
+            
+            # Process response
+            data = []
+            done = False
+            while not done:
+                event = self.session.nextEvent(500)
+                
+                if event.eventType() == blpapi.Event.RESPONSE:
+                    done = True
+                
+                for msg in event:
+                    security_data = msg.getElement("securityData")
+                    ticker = security_data.getElementAsString("security")
+                    field_data = security_data.getElement("fieldData")
+                    
+                    for i in range(field_data.numValues()):
+                        field_values = field_data.getValueAsElement(i)
+                        row_data = {'ticker': ticker}
+                        
+                        for field in fields:
+                            if field_values.hasElement(field):
+                                row_data[field] = field_values.getElementAsFloat(field)
+                            else:
+                                row_data[field] = None
+                        
+                        if field_values.hasElement("date"):
+                            row_data['date'] = field_values.getElementAsDatetime("date")
+                        
+                        data.append(row_data)
+            
+            return pd.DataFrame(data)
+            
+        except Exception as e:
+            logger.error(f"Error fetching company data: {str(e)}")
+            return pd.DataFrame()
+    
+    def subscribe_to_market_data(
+        self,
+        securities: List[str],
+        fields: List[str],
+        callback: callable
+    ) -> bool:
+        """
+        Subscribe to real-time market data updates.
+        
+        Args:
+            securities: List of securities to subscribe to
+            fields: List of fields to monitor
+            callback: Callback function for handling updates
+            
+        Returns:
+            bool: True if subscription successful
+        """
+        if not self.session:
+            if not self.connect():
+                return False
+        
+        try:
+            # Create subscription list
+            subscriptions = blpapi.SubscriptionList()
+            
+            for security in securities:
+                correlation_id = blpapi.CorrelationId(security)
+                subscriptions.add(
+                    security,
+                    fields,
+                    correlationId=correlation_id
+                )
+                self._market_data_subscriptions[security] = callback
+            
+            self.session.subscribe(subscriptions)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error subscribing to market data: {str(e)}")
+            return False
+    
+    def get_field_info(self, field: str) -> Dict:
+        """
+        Get information about a Bloomberg field.
+        
+        Args:
+            field: Bloomberg field to get info for
+            
+        Returns:
+            Dictionary containing field information
+        """
+        if not self.session:
+            if not self.connect():
+                return {}
+        
+        try:
+            apifields_service = self.session.getService("//blp/apifields")
+            request = apifields_service.createRequest("FieldInfoRequest")
+            request.set("id", field)
+            
+            # Send request
+            self.session.sendRequest(request)
+            
+            # Process response
+            field_info = {}
+            done = False
+            while not done:
+                event = self.session.nextEvent(500)
+                
+                if event.eventType() == blpapi.Event.RESPONSE:
+                    done = True
+                
+                for msg in event:
+                    if msg.hasElement("fieldData"):
+                        field_data = msg.getElement("fieldData")
+                        field_info = {
+                            'id': field_data.getElementAsString("id"),
+                            'mnemonic': field_data.getElementAsString("mnemonic"),
+                            'description': field_data.getElementAsString("description"),
+                            'documentation': field_data.getElementAsString("documentation"),
+                            'datatype': field_data.getElementAsString("datatype")
+                        }
+            
+            return field_info
+            
+        except Exception as e:
+            logger.error(f"Error getting field info: {str(e)}")
+            return {}
+    
     def _process_news_message(self, msg: blpapi.Message) -> List[Dict]:
         """
         Process a news message from Bloomberg API.
