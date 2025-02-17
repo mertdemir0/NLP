@@ -83,6 +83,66 @@ field_info = client.get_field_info("NEWS_SENTIMENT")
 print(f"Field description: {field_info['description']}")
 ```
 
+### ESG Data Analysis
+
+```python
+# Fetch ESG data for nuclear energy companies
+companies = ["EDF FP Equity", "CEZ CP Equity"]
+df_esg = client.fetch_esg_data(
+    companies=companies,
+    metrics=[
+        "ESG_DISCLOSURE_SCORE",
+        "ENVIRONMENTAL_DISCLOSURE_SCORE",
+        "CARBON_EMISSIONS_SCOPE_1"
+    ]
+)
+```
+
+### Nuclear Energy Indices
+
+```python
+# Fetch nuclear energy index data
+df_indices = client.fetch_nuclear_indices()
+print("Nuclear Energy Market Overview:")
+for _, row in df_indices.iterrows():
+    print(f"{row['ticker']}:")
+    print(f"  Price: {row['PX_LAST']}")
+    print(f"  1D Change: {row['CHG_PCT_1D']}%")
+    print(f"  YTD Change: {row['CHG_PCT_YTD']}%")
+```
+
+### Sentiment Analysis
+
+```python
+# Analyze sentiment trends
+topics = ["nuclear energy", "nuclear power"]
+trends, stats = client.analyze_sentiment_trends(
+    topics=topics,
+    lookback_days=90,
+    interval='weekly'
+)
+
+print("Sentiment Summary:")
+print(f"Overall Sentiment: {stats['overall_sentiment']:.2f}")
+print(f"Positive Articles: {stats['positive_ratio']*100:.1f}%")
+print(f"Negative Articles: {stats['negative_ratio']*100:.1f}%")
+```
+
+### Company Events
+
+```python
+# Track company events
+events = client.get_company_events(
+    company="EDF FP Equity",
+    event_types=["earnings", "regulatory_filing"],
+    start_date=datetime.datetime.now()
+)
+
+print("Upcoming Events:")
+for event in events:
+    print(f"{event['date']}: {event['type']} - {event['description']}")
+```
+
 ## Configuration
 
 ### Bloomberg Configuration File
@@ -118,6 +178,41 @@ market_data:
     - "VOLUME"
     - "NEWS_SENTIMENT"
   update_interval_ms: 5000
+
+# ESG settings
+esg_data:
+  metrics:
+    - ESG_DISCLOSURE_SCORE
+    - ENVIRONMENTAL_DISCLOSURE_SCORE
+    - SOCIAL_DISCLOSURE_SCORE
+    - GOVERNANCE_DISCLOSURE_SCORE
+    - ESG_RATING
+    - CARBON_EMISSIONS_SCOPE_1
+    - CARBON_EMISSIONS_SCOPE_2
+
+# Nuclear indices settings
+nuclear_indices:
+  - BNEF Nuclear Index
+  - S&P Global Nuclear Energy Index
+  - WNA Nuclear Energy Index
+
+# Sentiment analysis settings
+sentiment_analysis:
+  max_articles_per_request: 10000
+  default_lookback_days: 90
+  intervals:
+    - daily
+    - weekly
+    - monthly
+
+# Event tracking settings
+event_tracking:
+  types:
+    - earnings
+    - regulatory_filing
+    - corporate_action
+    - company_meeting
+  default_lookback_days: 30
 ```
 
 ## API Reference
@@ -148,6 +243,34 @@ market_data:
 - `get_field_info(field: str) -> Dict`
   - Gets information about a Bloomberg field
   - Returns dictionary with field details
+
+#### ESG Data Methods
+
+- `fetch_esg_data(companies: List[str], metrics: Optional[List[str]] = None) -> pd.DataFrame`
+  - Fetches ESG (Environmental, Social, Governance) data for companies
+  - Default metrics include ESG scores, ratings, and carbon emissions
+  - Returns pandas DataFrame with company ESG data
+
+#### Market Data Methods
+
+- `fetch_nuclear_indices() -> pd.DataFrame`
+  - Fetches data for major nuclear energy indices
+  - Includes price, volume, and performance metrics
+  - Returns pandas DataFrame with index data
+
+#### Analysis Methods
+
+- `analyze_sentiment_trends(topics: List[str], lookback_days: int = 90, interval: str = 'daily') -> Tuple[pd.DataFrame, Dict]`
+  - Analyzes sentiment trends in nuclear energy news
+  - Supports daily, weekly, or monthly aggregation
+  - Returns tuple of (trends DataFrame, summary statistics)
+
+#### Event Tracking Methods
+
+- `get_company_events(company: str, event_types: Optional[List[str]] = None, start_date: Optional[datetime] = None) -> List[Dict]`
+  - Fetches company events (earnings, regulatory filings, etc.)
+  - Supports filtering by event type and date
+  - Returns list of event dictionaries
 
 ## Error Handling
 

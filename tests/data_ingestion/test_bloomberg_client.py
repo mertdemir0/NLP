@@ -6,6 +6,7 @@ import pytest
 import datetime
 from unittest.mock import Mock, patch
 import pandas as pd
+import numpy as np
 from src.data_ingestion.bloomberg_client import BloombergClient
 
 @pytest.fixture
@@ -201,3 +202,189 @@ def test_context_manager(client, mock_session):
         assert c.session is mock_session
     
     mock_session.stop.assert_called_once()
+
+def test_fetch_esg_data(client, mock_session):
+    """Test ESG data fetching."""
+    # Mock response message
+    mock_msg = Mock()
+    
+    # Mock security data
+    mock_security_data = Mock()
+    mock_security_data.numValues.return_value = 1
+    
+    # Mock security
+    mock_security = Mock()
+    mock_security.getElementAsString.return_value = "TEST"
+    
+    # Mock field data
+    mock_field_data = Mock()
+    mock_field_data.hasElement.return_value = True
+    mock_field_data.getElementAsFloat.return_value = 75.5
+    
+    # Set up message structure
+    mock_security.getElement.return_value = mock_field_data
+    mock_security_data.getValueAsElement.return_value = mock_security
+    mock_msg.getElement.return_value = mock_security_data
+    
+    # Mock event
+    mock_event = Mock()
+    mock_event.eventType.return_value = "RESPONSE"
+    mock_event.__iter__ = lambda x: iter([mock_msg])
+    
+    # Set up session response
+    mock_session.nextEvent.return_value = mock_event
+    
+    # Test ESG data fetching
+    df = client.fetch_esg_data(["TEST"])
+    
+    assert isinstance(df, pd.DataFrame)
+    assert not df.empty
+    assert "ESG_DISCLOSURE_SCORE" in df.columns
+
+def test_fetch_nuclear_indices(client, mock_session):
+    """Test nuclear indices fetching."""
+    # Mock response message
+    mock_msg = Mock()
+    
+    # Mock security data
+    mock_security_data = Mock()
+    mock_security_data.getElementAsString.return_value = "NUCLEAR_INDEX"
+    
+    # Mock field data
+    mock_field_values = Mock()
+    mock_field_values.hasElement.return_value = True
+    mock_field_values.getElementAsFloat.return_value = 1000.0
+    mock_field_values.getElementAsDatetime.return_value = datetime.datetime.now()
+    
+    # Mock field data container
+    mock_field_data = Mock()
+    mock_field_data.numValues.return_value = 1
+    mock_field_data.getValueAsElement.return_value = mock_field_values
+    
+    # Set up message structure
+    mock_security_data.getElement.return_value = mock_field_data
+    mock_msg.getElement.return_value = mock_security_data
+    
+    # Mock event
+    mock_event = Mock()
+    mock_event.eventType.return_value = "RESPONSE"
+    mock_event.__iter__ = lambda x: iter([mock_msg])
+    
+    # Set up session response
+    mock_session.nextEvent.return_value = mock_event
+    
+    # Test indices fetching
+    df = client.fetch_nuclear_indices()
+    
+    assert isinstance(df, pd.DataFrame)
+    assert not df.empty
+    assert "PX_LAST" in df.columns
+
+def test_analyze_sentiment_trends(client, mock_session):
+    """Test sentiment trend analysis."""
+    # Mock news articles
+    mock_articles = [
+        {
+            'headline': 'Test Headline 1',
+            'body': 'Positive test content',
+            'date': datetime.datetime.now(),
+            'source': 'Test Source',
+            'uri': 'test://uri1'
+        },
+        {
+            'headline': 'Test Headline 2',
+            'body': 'Negative test content',
+            'date': datetime.datetime.now() - datetime.timedelta(days=1),
+            'source': 'Test Source',
+            'uri': 'test://uri2'
+        }
+    ]
+    
+    # Mock sentiment analysis
+    with patch.object(client, 'fetch_news_articles', return_value=mock_articles):
+        with patch.object(client, '_extract_sentiment', side_effect=[0.8, -0.5]):
+            trends, stats = client.analyze_sentiment_trends(
+                topics=["nuclear energy"],
+                lookback_days=7,
+                interval='daily'
+            )
+    
+    assert isinstance(trends, pd.DataFrame)
+    assert isinstance(stats, dict)
+    assert 'overall_sentiment' in stats
+    assert 'total_articles' in stats
+    assert stats['total_articles'] == 2
+
+def test_get_company_events(client, mock_session):
+    """Test company event fetching."""
+    # Mock response message
+    mock_msg = Mock()
+    
+    # Mock calendar data
+    mock_calendar_data = Mock()
+    mock_calendar_data.numValues.return_value = 1
+    
+    # Mock calendar event
+    mock_event_data = Mock()
+    mock_event_data.getElementAsDatetime.return_value = datetime.datetime.now()
+    mock_event_data.getElementAsString.side_effect = lambda x: {
+        "type": "earnings",
+        "description": "Q4 2024 Earnings Release"
+    }[x]
+    mock_event_data.hasElement.return_value = True
+    
+    # Mock event details
+    mock_details = Mock()
+    mock_details.numElements.return_value = 1
+    mock_details.getElement.return_value = Mock(
+        name=lambda: "time",
+        getValueAsString=lambda: "09:00"
+    )
+    
+    # Set up message structure
+    mock_event_data.getElement.return_value = mock_details
+    mock_calendar_data.getValueAsElement.return_value = mock_event_data
+    mock_msg.getElement.return_value = mock_calendar_data
+    
+    # Mock event
+    mock_event = Mock()
+    mock_event.eventType.return_value = "RESPONSE"
+    mock_event.__iter__ = lambda x: iter([mock_msg])
+    
+    # Set up session response
+    mock_session.nextEvent.return_value = mock_event
+    
+    # Test event fetching
+    events = client.get_company_events("TEST")
+    
+    assert isinstance(events, list)
+    assert len(events) == 1
+    assert events[0]['type'] == "earnings"
+    assert 'details' in events[0]
+
+def test_extract_sentiment(client, mock_session):
+    """Test sentiment extraction."""
+    # Mock response message
+    mock_msg = Mock()
+    mock_msg.hasElement.return_value = True
+    
+    # Mock sentiment data
+    mock_sentiment = Mock()
+    mock_sentiment.getElementAsFloat.return_value = 0.75
+    
+    # Set up message structure
+    mock_msg.getElement.return_value = mock_sentiment
+    
+    # Mock event
+    mock_event = Mock()
+    mock_event.eventType.return_value = "RESPONSE"
+    mock_event.__iter__ = lambda x: iter([mock_msg])
+    
+    # Set up session response
+    mock_session.nextEvent.return_value = mock_event
+    
+    # Test sentiment extraction
+    score = client._extract_sentiment("Test positive content")
+    
+    assert isinstance(score, float)
+    assert -1 <= score <= 1

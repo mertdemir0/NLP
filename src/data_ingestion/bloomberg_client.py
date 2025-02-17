@@ -3,10 +3,12 @@ Bloomberg API client for fetching nuclear energy related articles and data.
 """
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 import datetime
 import blpapi
 import pandas as pd
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,10 @@ class BloombergClient:
         
         self.session = None
         self._market_data_subscriptions = {}
-    
+        self._event_handlers = {}
+        self._max_retries = config.get('max_retries', 3)
+        self._retry_delay = config.get('retry_delay_ms', 1000)
+        
     def connect(self) -> bool:
         """
         Establish connection to Bloomberg API.
@@ -345,6 +350,269 @@ class BloombergClient:
             logger.error(f"Error processing news message: {str(e)}")
         
         return articles
+    
+    def fetch_esg_data(
+        self,
+        companies: List[str],
+        metrics: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        """
+        Fetch ESG (Environmental, Social, Governance) data for companies.
+        
+        Args:
+            companies: List of company tickers
+            metrics: Optional list of ESG metrics to fetch
+            
+        Returns:
+            DataFrame containing ESG data
+        """
+        if not metrics:
+            metrics = [
+                "ESG_DISCLOSURE_SCORE",
+                "ENVIRONMENTAL_DISCLOSURE_SCORE",
+                "SOCIAL_DISCLOSURE_SCORE",
+                "GOVERNANCE_DISCLOSURE_SCORE",
+                "ESG_RATING",
+                "CARBON_EMISSIONS_SCOPE_1",
+                "CARBON_EMISSIONS_SCOPE_2"
+            ]
+        
+        try:
+            refdata_service = self.session.getService("//blp/refdata")
+            request = refdata_service.createRequest("ReferenceDataRequest")
+            
+            for company in companies:
+                request.getElement("securities").appendValue(company)
+            for metric in metrics:
+                request.getElement("fields").appendValue(metric)
+            
+            self.session.sendRequest(request)
+            
+            data = []
+            while True:
+                event = self.session.nextEvent(500)
+                
+                if event.eventType() == blpapi.Event.RESPONSE:
+                    for msg in event:
+                        security_data = msg.getElement("securityData")
+                        
+                        for i in range(security_data.numValues()):
+                            security = security_data.getValueAsElement(i)
+                            ticker = security.getElementAsString("security")
+                            field_data = security.getElement("fieldData")
+                            
+                            row = {'ticker': ticker}
+                            for metric in metrics:
+                                if field_data.hasElement(metric):
+                                    row[metric] = field_data.getElementAsFloat(metric)
+                                else:
+                                    row[metric] = None
+                            
+                            data.append(row)
+                    break
+            
+            return pd.DataFrame(data)
+            
+        except Exception as e:
+            logger.error(f"Error fetching ESG data: {str(e)}")
+            return pd.DataFrame()
+    
+    def fetch_nuclear_indices(self) -> pd.DataFrame:
+        """
+        Fetch data for nuclear energy related indices.
+        
+        Returns:
+            DataFrame containing index data
+        """
+        indices = [
+            "BNEF Nuclear Index",
+            "S&P Global Nuclear Energy Index",
+            "WNA Nuclear Energy Index"
+        ]
+        
+        fields = [
+            "PX_LAST",
+            "VOLUME",
+            "CHG_PCT_1D",
+            "CHG_PCT_YTD",
+            "TOP_10_HOLDINGS",
+            "INDEX_MARKET_CAP"
+        ]
+        
+        return self.fetch_company_data(indices, fields)
+    
+    def analyze_sentiment_trends(
+        self,
+        topics: List[str],
+        lookback_days: int = 90,
+        interval: str = 'daily'
+    ) -> Tuple[pd.DataFrame, Dict]:
+        """
+        Analyze sentiment trends in nuclear energy news.
+        
+        Args:
+            topics: List of topics to analyze
+            lookback_days: Number of days to look back
+            interval: Aggregation interval ('daily', 'weekly', 'monthly')
+            
+        Returns:
+            Tuple of (sentiment_trends, summary_stats)
+        """
+        end_date = datetime.datetime.now()
+        start_date = end_date - datetime.timedelta(days=lookback_days)
+        
+        articles = self.fetch_news_articles(
+            topics=topics,
+            start_date=start_date,
+            end_date=end_date,
+            max_articles=10000
+        )
+        
+        if not articles:
+            return pd.DataFrame(), {}
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(articles)
+        df['date'] = pd.to_datetime(df['date'])
+        
+        # Extract sentiment scores
+        df['sentiment_score'] = df.apply(
+            lambda x: self._extract_sentiment(x['body']),
+            axis=1
+        )
+        
+        # Resample based on interval
+        interval_map = {
+            'daily': 'D',
+            'weekly': 'W',
+            'monthly': 'M'
+        }
+        
+        trends = df.set_index('date').resample(interval_map[interval]).agg({
+            'sentiment_score': ['mean', 'std', 'count'],
+            'headline': 'count'
+        }).reset_index()
+        
+        # Calculate summary statistics
+        summary_stats = {
+            'overall_sentiment': df['sentiment_score'].mean(),
+            'sentiment_std': df['sentiment_score'].std(),
+            'total_articles': len(df),
+            'positive_ratio': (df['sentiment_score'] > 0).mean(),
+            'negative_ratio': (df['sentiment_score'] < 0).mean(),
+            'neutral_ratio': (df['sentiment_score'] == 0).mean(),
+            'max_sentiment_date': df.loc[df['sentiment_score'].idxmax(), 'date'],
+            'min_sentiment_date': df.loc[df['sentiment_score'].idxmin(), 'date']
+        }
+        
+        return trends, summary_stats
+    
+    def get_company_events(
+        self,
+        company: str,
+        event_types: Optional[List[str]] = None,
+        start_date: Optional[datetime.datetime] = None
+    ) -> List[Dict]:
+        """
+        Fetch company events (earnings, regulatory, etc.).
+        
+        Args:
+            company: Company ticker
+            event_types: Optional list of event types to filter
+            start_date: Optional start date for events
+            
+        Returns:
+            List of company events
+        """
+        if not event_types:
+            event_types = [
+                "earnings",
+                "regulatory_filing",
+                "corporate_action",
+                "company_meeting"
+            ]
+        
+        try:
+            refdata_service = self.session.getService("//blp/refdata")
+            request = refdata_service.createRequest("CalendarEventRequest")
+            
+            request.set("security", company)
+            if start_date:
+                request.set("startDate", start_date.strftime("%Y%m%d"))
+            
+            event_type_element = request.getElement("eventTypes")
+            for event_type in event_types:
+                event_type_element.appendValue(event_type)
+            
+            self.session.sendRequest(request)
+            
+            events = []
+            while True:
+                event = self.session.nextEvent(500)
+                
+                if event.eventType() == blpapi.Event.RESPONSE:
+                    for msg in event:
+                        calendar_data = msg.getElement("calendarData")
+                        
+                        for i in range(calendar_data.numValues()):
+                            calendar_event = calendar_data.getValueAsElement(i)
+                            
+                            event_data = {
+                                'date': calendar_event.getElementAsDatetime("date"),
+                                'type': calendar_event.getElementAsString("type"),
+                                'description': calendar_event.getElementAsString("description")
+                            }
+                            
+                            if calendar_event.hasElement("details"):
+                                details = calendar_event.getElement("details")
+                                event_data['details'] = {
+                                    details.getElement(j).name(): details.getElement(j).getValueAsString()
+                                    for j in range(details.numElements())
+                                }
+                            
+                            events.append(event_data)
+                    break
+            
+            return events
+            
+        except Exception as e:
+            logger.error(f"Error fetching company events: {str(e)}")
+            return []
+    
+    def _extract_sentiment(self, text: str) -> float:
+        """
+        Extract sentiment score from text using Bloomberg's sentiment analysis.
+        
+        Args:
+            text: Text to analyze
+            
+        Returns:
+            Sentiment score between -1 and 1
+        """
+        try:
+            news_service = self.session.getService("//blp/news")
+            request = news_service.createRequest("NewsTextAnalysisRequest")
+            
+            request.set("text", text)
+            request.set("analysisType", "sentiment")
+            
+            self.session.sendRequest(request)
+            
+            while True:
+                event = self.session.nextEvent(500)
+                
+                if event.eventType() == blpapi.Event.RESPONSE:
+                    for msg in event:
+                        if msg.hasElement("sentiment"):
+                            sentiment = msg.getElement("sentiment")
+                            return sentiment.getElementAsFloat("score")
+                    break
+            
+            return 0.0
+            
+        except Exception as e:
+            logger.error(f"Error extracting sentiment: {str(e)}")
+            return 0.0
     
     def __enter__(self):
         """Context manager entry."""
