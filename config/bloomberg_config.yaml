@@ -34,3 +34,122 @@ market_data:
     - "VOLUME"
     - "NEWS_SENTIMENT"
   update_interval_ms: 5000
+
+# Advanced features
+api:
+  host: "localhost"
+  port: 8194
+  max_retries: 3
+  timeout_seconds: 30
+  rate_limit:
+    requests_per_minute: 100
+    burst_limit: 150
+
+cache:
+  enabled: true
+  backend: "redis"
+  ttl_seconds: 3600
+  max_size_mb: 1024
+
+data_ingestion:
+  batch_size: 1000
+  parallel_requests: 4
+  max_historical_days: 365
+  
+  news:
+    languages: ["EN", "FR", "DE"]
+    max_articles_per_request: 10000
+    sources:
+      - "Bloomberg News"
+      - "Reuters"
+      - "Financial Times"
+      - "World Nuclear News"
+    
+  market_data:
+    update_interval_ms: 5000
+    fields:
+      - "PX_LAST"
+      - "VOLUME"
+      - "BID"
+      - "ASK"
+      - "VWAP"
+      - "VOLATILITY_10D"
+      - "RSI_14D"
+      - "MACD"
+
+analysis:
+  sentiment:
+    model: "finbert-nuclear"
+    batch_size: 32
+    threshold:
+      positive: 0.6
+      negative: 0.4
+    aggregation_intervals:
+      - "hourly"
+      - "daily"
+      - "weekly"
+      - "monthly"
+    
+  forecasting:
+    models:
+      - name: "prophet"
+        seasonality_mode: "multiplicative"
+        changepoint_prior_scale: 0.05
+      - name: "lstm"
+        layers: [64, 32]
+        dropout: 0.2
+      - name: "lightgbm"
+        num_leaves: 31
+        learning_rate: 0.05
+    
+  anomaly_detection:
+    algorithm: "isolation_forest"
+    contamination: 0.1
+    features:
+      - "price"
+      - "volume"
+      - "sentiment"
+      - "volatility"
+
+monitoring:
+  metrics:
+    enabled: true
+    prometheus_port: 9090
+    collect_interval_seconds: 60
+    
+  logging:
+    level: "INFO"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+  alerts:
+    channels:
+      - type: "email"
+        recipients: ["alerts@company.com"]
+      - type: "slack"
+        channel: "#nuclear-alerts"
+    
+    rules:
+      - name: "price_spike"
+        condition: "change_percent > 5"
+        cooldown_minutes: 60
+      - name: "high_volatility"
+        condition: "volatility_10d > 30"
+        cooldown_minutes: 120
+      - name: "sentiment_shift"
+        condition: "sentiment_change > 0.3"
+        cooldown_minutes: 30
+
+visualization:
+  dashboard:
+    port: 8050
+    refresh_interval_seconds: 300
+    default_timeframe_days: 30
+    
+  charts:
+    theme: "plotly_dark"
+    default_height: 600
+    max_points: 10000
+    
+  export:
+    formats: ["csv", "xlsx", "json"]
+    auto_schedule: "0 0 * * *"  # Daily at midnight
