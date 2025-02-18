@@ -1,13 +1,4 @@
-"""
-Data ingestion modules for nuclear energy content analysis.
-"""
+"""Data ingestion package for collecting and processing articles."""
+from .news_scraper import NewsScraper
 
-from .ingestion import DataIngestion
-from .pdf_parser import PDFParser
-from .html_parser import HTMLParser
-
-__all__ = [
-    'DataIngestion',
-    'PDFParser',
-    'HTMLParser'
-]
+__all__ = ['NewsScraper']

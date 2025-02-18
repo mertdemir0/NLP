@@ -4,10 +4,14 @@
 bloomberg_host: localhost
 bloomberg_port: 8194
 
-# Authentication (if required)
+# Authentication
 bloomberg_auth:
   username: ${BLOOMBERG_USERNAME}
   password: ${BLOOMBERG_PASSWORD}
+  api_key: ${BLOOMBERG_API_KEY}
+  api_secret: ${BLOOMBERG_API_SECRET}
+  api_token: ${BLOOMBERG_API_TOKEN}
+
 
 # News search settings
 news_search:
@@ -23,6 +27,12 @@ news_search:
     - "nuclear regulation"
   max_articles_per_request: 1000
   default_date_range_days: 30
+  languages:
+    - "en"  # English
+    - "fr"  # French
+    - "de"  # German
+    - "es"  # Spanish
+    - "it"  # Italian
 
 # Market data settings
 market_data:
@@ -33,6 +43,8 @@ market_data:
     - "PX_LAST"
     - "VOLUME"
     - "NEWS_SENTIMENT"
+    - "PRICE_CHANGE_PCT"
+    - "MARKET_CAP"
   update_interval_ms: 5000
 
 # Advanced features
@@ -48,6 +60,9 @@ api:
 cache:
   enabled: true
   backend: "redis"
+  host: ${REDIS_HOST}
+  port: ${REDIS_PORT}
+  password: ${REDIS_PASSWORD}
   ttl_seconds: 3600
   max_size_mb: 1024
 
@@ -183,6 +198,7 @@ analysis:
         - "entity"
         - "topic"
 
+# Monitoring
 monitoring:
   logging:
     level: "INFO"
@@ -221,6 +237,7 @@ monitoring:
         condition: "lag_minutes > 30"
         cooldown_minutes: 15
 
+# Export
 export:
   formats: ["csv", "xlsx", "json", "parquet"]
   scheduling:
@@ -229,6 +246,7 @@ export:
   compression: true
   retention_days: 90
 
+# Visualization
 visualization:
   dashboard:
     port: 8050

@@ -27,11 +27,15 @@ class BloombergClient:
         self.session_options.setServerHost(config.get('bloomberg_host', 'localhost'))
         self.session_options.setServerPort(config.get('bloomberg_port', 8194))
         
-        # Set authentication options if provided
-        if 'bloomberg_auth' in config:
+        # Set authentication options
+        auth = config.get('bloomberg_auth', {})
+        if auth:
             auth_options = blpapi.AuthOptions()
             auth_options.setUserName(config['bloomberg_auth']['username'])
             auth_options.setPassword(config['bloomberg_auth']['password'])
+            auth_options.setApiKey(auth.get('api_key'))
+            auth_options.setApiSecret(auth.get('api_secret'))
+            auth_options.setApiToken(auth.get('api_token'))
             self.session_options.setAuthenticationOptions(auth_options)
         
         self.session = None

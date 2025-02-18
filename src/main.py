@@ -12,6 +12,9 @@ from typing import Dict, List
 
 from .utils import setup_logging, load_config
 from .data_ingestion import DataIngestion
+from .utils.config import Config
+from .utils.logger import Logger
+from .data_ingestion.news_scraper import NewsScraper
 from .preprocessing import TextCleaner, Tokenizer, Normalizer
 from .analysis import (
     SentimentAnalyzer,
@@ -22,7 +25,7 @@ from .analysis import (
 )
 from .visualization import NuclearEnergyDashboard, ReportGenerator
 
-logger = logging.getLogger(__name__)
+logger = Logger(__name__)
 
 def parse_args():
     """Parse command line arguments."""
@@ -51,6 +54,20 @@ def parse_args():
     )
     
     parser.add_argument(
+        '--days',
+        type=int,
+        default=30,
+        help='Number of days to look back for articles'
+    )
+    
+    parser.add_argument(
+        '--query',
+        type=str,
+        default='nuclear energy',
+        help='Search query for articles'
+    )
+    
+    parser.add_argument(
         '--log-level',
         type=str,
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -66,13 +83,15 @@ def parse_args():
     
     return parser.parse_args()
 
-def run_pipeline(config: Dict, input_dir: str, output_dir: str) -> Dict:
+def run_pipeline(config: Dict, query: str, days: int, output_dir: str) -> Dict:
     """
     Run the complete analysis pipeline.
     
     Args:
         config: Configuration dictionary
         input_dir: Input directory path
+        query: Search query for articles
+        days: Number of days to look back
         output_dir: Output directory path
         
     Returns:
@@ -80,9 +99,12 @@ def run_pipeline(config: Dict, input_dir: str, output_dir: str) -> Dict:
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    raw_dir = os.path.join(output_dir, 'raw')
+    processed_dir = os.path.join(output_dir, 'processed')
     
     # Initialize components
     ingestion = DataIngestion(config)
+    scraper = NewsScraper(config)
     text_cleaner = TextCleaner()
     tokenizer = Tokenizer()
     normalizer = Normalizer()
@@ -95,26 +117,36 @@ def run_pipeline(config: Dict, input_dir: str, output_dir: str) -> Dict:
         'geo': GeoAnalyzer()
     }
     
-    # Ingest data
-    logger.info("Starting data ingestion...")
+    # Scrape articles
+    logger.info(f"Scraping articles for query: {query} (last {days} days)...")
     results = ingestion.ingest_directory(input_dir)
     ingestion.save_results(results, os.path.join(output_dir, 'raw'))
+    articles = scraper.run(query=query, days=days, output_dir=raw_dir)
     
     # Preprocess texts
-    logger.info("Preprocessing texts...")
+    logger.info("Preprocessing articles...")
     processed_texts = []
-    for result in results:
-        if result['success']:
-            text = result['text']
+    for article in articles:
+        try:
+            text = article['text']
             text = text_cleaner.clean(text)
             tokens = tokenizer.tokenize(text)
             normalized = normalizer.normalize(tokens)
+            
             processed_texts.append({
                 'text': text,
                 'tokens': tokens,
                 'normalized': normalized,
-                'metadata': result['metadata']
+                'metadata': {
+                    'title': article['title'],
+                    'url': article['url'],
+                    'date': article['date'],
+                    'source': article['source']
+                }
             })
+        except Exception as e:
+            logger.error(f"Error processing article: {str(e)}")
+            continue
     
     # Run analysis
     logger.info("Running analysis...")
@@ -149,11 +181,16 @@ def main():
     setup_logging(args.log_level)
     
     # Load configuration
-    config = load_config(args.config)
+    config = Config()
     
     try:
         # Run pipeline
-        results = run_pipeline(config, args.input_dir, args.output_dir)
+        results = run_pipeline(
+            config=config.get_all_configs(),
+            query=args.query,
+            days=args.days,
+            output_dir=args.output_dir
+        )
         
         # Launch dashboard if requested
         if args.dashboard:
