@@ -172,6 +172,7 @@ class IAEAScraper:
     
     async def _scrape(self, start_page: int = 0, end_page: int = 691):
         """Internal async scraping method."""
+        total_articles = []
         async with async_playwright() as playwright:
             # Launch browser with optimized settings
             browser = await playwright.chromium.launch(
@@ -198,21 +199,25 @@ class IAEAScraper:
                         if isinstance(result, list):
                             chunk_articles.extend(result)
                     
-                    # Save chunk results
+                    # Save chunk results and add to total
                     if chunk_articles:
                         self.save_articles(chunk_articles)
+                        total_articles.extend(chunk_articles)
                     
                     # Small delay between chunks
                     await asyncio.sleep(1)
                 
             finally:
                 await browser.close()
+                
+        return total_articles
     
     def scrape_articles(self, start_page: int = 0, end_page: int = 691):
         """Scrape IAEA articles using async Playwright."""
         try:
             # Run async scraping
-            asyncio.run(self._scrape(start_page, end_page))
+            return asyncio.run(self._scrape(start_page, end_page))
             
         except Exception as e:
             logger.error(f"Error during scraping: {str(e)}")
+            return []
