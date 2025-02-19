@@ -1,7 +1,6 @@
 """Script to run the IAEA scraper."""
 from src.data_ingestion.iaea_scraper import IAEAScraper
 import logging
-import os
 
 # Configure logging
 logging.basicConfig(
@@ -16,12 +15,14 @@ os.makedirs('data', exist_ok=True)
 def main():
     """Run the IAEA scraper."""
     try:
-        # Initialize scraper
-        scraper = IAEAScraper()
+        # Initialize scraper with chunk size of 5
+        scraper = IAEAScraper(chunk_size=5)
         
-        # Scrape first page only
-        logger.info("Scraping first page of IAEA news articles...")
-        articles = scraper.scrape_page(0)
+        # Scrape all pages (0-691)
+        logger.info("Starting full scrape of IAEA news articles...")
+        articles = scraper.scrape_articles(start_page=0, end_page=691)
+        
+        logger.info(f"Scraping complete! Found {len(articles)} unique articles")
         
         # Save articles
         if articles:
