@@ -1,6 +1,6 @@
 """IAEA News Scraper for collecting articles from IAEA website."""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import os
 import re
@@ -152,25 +152,35 @@ class IAEAScraper:
             
         try:
             for article in articles:
-                existing = self.db_session.query(RawArticle).filter_by(url=article['url']).first()
-                if not existing:
-                    db_article = RawArticle(
-                        title=article['title'],
-                        content=article['content'],
-                        url=article['url'],
-                        date=article['date'],
-                        topics=article['topics'],
-                        source=article['source'],
-                        type=article.get('type', 'Unknown'),
-                        created_at=datetime.now()
-                    )
-                    self.db_session.add(db_article)
+                try:
+                    logger.info(f"Attempting to save article: {article['title']}")
+                    existing = self.db_session.query(RawArticle).filter_by(url=article['url']).first()
+                    if not existing:
+                        db_article = RawArticle(
+                            title=article['title'],
+                            content=article['content'],
+                            url=article['url'],
+                            date=article['date'],
+                            topics=article['topics'],
+                            source=article['source'],
+                            type=article.get('type', 'Unknown'),
+                            created_at=datetime.now()
+                        )
+                        self.db_session.add(db_article)
+                        logger.info(f"Added article to session: {article['title']}")
+                except Exception as e:
+                    logger.error(f"Error creating article object: {str(e)}")
+                    logger.error(f"Article data: {article}")
+                    continue
             
+            logger.info("Committing session...")
             self.db_session.commit()
-            logger.info(f"Saved {len(articles)} articles to database")
+            logger.info(f"Successfully saved {len(articles)} articles to database")
+            
         except Exception as e:
             self.db_session.rollback()
             logger.error(f"Error saving to database: {str(e)}")
+            logger.error("Rolling back transaction")
     
     async def _scrape(self, start_page: int = 0, end_page: int = 691):
         """Internal async scraping method."""
