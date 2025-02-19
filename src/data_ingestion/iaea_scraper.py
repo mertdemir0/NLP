@@ -8,6 +8,7 @@ import asyncio
 from typing import List, Dict
 from playwright.async_api import async_playwright
 from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
 from .database import init_db, RawArticle
 
 # Configure logging
@@ -20,28 +21,29 @@ logger = logging.getLogger(__name__)
 class IAEAScraper:
     """Scraper for IAEA news articles."""
     
-    def __init__(self, max_concurrent: int = 10):
+    def __init__(self, max_concurrent: int = 20):
         """Initialize the IAEA scraper."""
         self.max_concurrent = max_concurrent
         self.base_url = "https://www.iaea.org"
         self.db_session = init_db()
         self.semaphore = asyncio.Semaphore(max_concurrent)
+        self.pending_articles = []
         
     def __del__(self):
         """Clean up resources."""
         if hasattr(self, 'db_session'):
             self.db_session.close()
-    
+            
     async def extract_article_content(self, page, href: str) -> Dict:
         """Extract content from article page."""
         try:
-            await page.goto(href, wait_until='domcontentloaded')
+            await page.goto(href, wait_until='domcontentloaded', timeout=5000)
             
             # Get content
             content = ""
             for selector in ['div.field--name-body', 'div.field--type-text-with-summary', 'div.news-story-text']:
                 try:
-                    content_elem = await page.wait_for_selector(selector, timeout=5000)
+                    content_elem = await page.wait_for_selector(selector, timeout=3000)
                     if content_elem:
                         content = await content_elem.text_content()
                         if content.strip():
@@ -67,7 +69,51 @@ class IAEAScraper:
         except Exception as e:
             logger.error(f"Error extracting article content: {str(e)}")
             return {'content': "Error extracting content", 'topics': []}
-    
+            
+    def save_articles_batch(self, articles: List[Dict], batch_size: int = 100):
+        """Save articles to database in batches."""
+        if not articles:
+            return
+            
+        try:
+            # Add articles to pending list
+            self.pending_articles.extend(articles)
+            
+            # If we have enough articles, save them in a batch
+            if len(self.pending_articles) >= batch_size:
+                articles_to_save = self.pending_articles[:batch_size]
+                self.pending_articles = self.pending_articles[batch_size:]
+                
+                # Get existing URLs in a single query
+                urls = [a['url'] for a in articles_to_save]
+                existing_urls = {url[0] for url in self.db_session.query(RawArticle.url).filter(RawArticle.url.in_(urls)).all()}
+                
+                # Prepare all new articles
+                new_articles = []
+                for article in articles_to_save:
+                    if article['url'] not in existing_urls:
+                        db_article = RawArticle(
+                            title=article['title'],
+                            content=article['content'],
+                            url=article['url'],
+                            date=article['date'],
+                            topics=article['topics'],
+                            source=article['source'],
+                            type=article.get('type', 'Unknown'),
+                            created_at=datetime.now()
+                        )
+                        new_articles.append(db_article)
+                
+                # Bulk insert new articles
+                if new_articles:
+                    self.db_session.bulk_save_objects(new_articles)
+                    self.db_session.commit()
+                    logger.info(f"Saved batch of {len(new_articles)} new articles")
+                
+        except Exception as e:
+            self.db_session.rollback()
+            logger.error(f"Error saving to database: {str(e)}")
+            
     async def process_article(self, article_page, article_element, base_url: str) -> Dict:
         """Process a single article."""
         try:
@@ -107,86 +153,45 @@ class IAEAScraper:
             logger.error(f"Error processing article: {str(e)}")
             return None
     
-    async def process_page(self, browser, page_num: int) -> List[Dict]:
+    async def process_page(self, context, page_num: int) -> List[Dict]:
         """Process a single page of articles."""
         articles = []
         page_url = f"{self.base_url}/news?topics=All&type=All&keywords=&page={page_num}"
         
         async with self.semaphore:
             try:
-                # Create context with two pages
-                context = await browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    java_script_enabled=True
-                )
+                # Create pages
                 listing_page = await context.new_page()
                 article_page = await context.new_page()
                 
-                # Load listing page
-                await listing_page.goto(page_url, wait_until='domcontentloaded')
-                await listing_page.wait_for_selector('div.row div.grid', timeout=10000)
+                # Load listing page with shorter timeout
+                await listing_page.goto(page_url, wait_until='domcontentloaded', timeout=5000)
+                await listing_page.wait_for_selector('div.row div.grid', timeout=5000)
                 
                 # Get all articles
                 article_elements = await listing_page.query_selector_all('div.row > div.col-xs-12')
                 
-                # Process articles one by one to avoid rate limiting
-                for article_elem in article_elements:
-                    try:
-                        article = await self.process_article(article_page, article_elem, self.base_url)
-                        if article:
-                            articles.append(article)
-                            # Add delay between articles
-                            await asyncio.sleep(0.5)
-                    except Exception as e:
-                        logger.error(f"Error processing article: {str(e)}")
-                        continue
+                # Process articles concurrently in smaller batches
+                batch_size = 4
+                for i in range(0, len(article_elements), batch_size):
+                    batch = article_elements[i:i + batch_size]
+                    tasks = [self.process_article(article_page, elem, self.base_url) for elem in batch]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    # Add successful results
+                    articles.extend([r for r in results if r is not None and not isinstance(r, Exception)])
+                    
+                    # Small delay between batches
+                    await asyncio.sleep(0.2)
                 
                 # Clean up
                 await listing_page.close()
                 await article_page.close()
-                await context.close()
                 
             except Exception as e:
                 logger.error(f"Error processing page {page_num}: {str(e)}")
             
         return articles
-    
-    def save_articles(self, articles: List[Dict]):
-        """Save articles to database."""
-        if not articles:
-            return
-            
-        try:
-            for article in articles:
-                try:
-                    logger.info(f"Attempting to save article: {article['title']}")
-                    existing = self.db_session.query(RawArticle).filter_by(url=article['url']).first()
-                    if not existing:
-                        db_article = RawArticle(
-                            title=article['title'],
-                            content=article['content'],
-                            url=article['url'],
-                            date=article['date'],
-                            topics=article['topics'],
-                            source=article['source'],
-                            type=article.get('type', 'Unknown'),
-                            created_at=datetime.now()
-                        )
-                        self.db_session.add(db_article)
-                        logger.info(f"Added article to session: {article['title']}")
-                except Exception as e:
-                    logger.error(f"Error creating article object: {str(e)}")
-                    logger.error(f"Article data: {article}")
-                    continue
-            
-            logger.info("Committing session...")
-            self.db_session.commit()
-            logger.info(f"Successfully saved {len(articles)} articles to database")
-            
-        except Exception as e:
-            self.db_session.rollback()
-            logger.error(f"Error saving to database: {str(e)}")
-            logger.error("Rolling back transaction")
     
     async def _scrape(self, start_page: int = 0, end_page: int = 691):
         """Internal async scraping method."""
@@ -197,41 +202,58 @@ class IAEAScraper:
             # Launch browser with optimized settings
             browser = await playwright.chromium.launch(
                 headless=True,
-                args=['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage']
+                args=[
+                    '--disable-gpu',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-setuid-sandbox',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-site-isolation-trials'
+                ]
             )
             
             try:
-                # Create tasks for all pages
-                tasks = []
-                for page_num in range(start_page, end_page + 1):
-                    task = self.process_page(browser, page_num)
-                    tasks.append(task)
+                # Create persistent context
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    java_script_enabled=True,
+                    bypass_csp=True
+                )
                 
-                # Process pages in chunks to avoid memory issues
-                chunk_size = 5
-                total_chunks = (len(tasks) + chunk_size - 1) // chunk_size
-                for chunk_num, i in enumerate(range(0, len(tasks), chunk_size)):
-                    chunk_tasks = tasks[i:i + chunk_size]
-                    logger.info(f"Processing chunk {chunk_num + 1}/{total_chunks} (pages {i}-{min(i + chunk_size - 1, end_page)})")
+                # Process pages in larger chunks
+                chunk_size = 10
+                total_chunks = (total_pages + chunk_size - 1) // chunk_size
+                
+                for chunk_num, i in enumerate(range(start_page, end_page + 1, chunk_size)):
+                    chunk_end = min(i + chunk_size, end_page + 1)
+                    logger.info(f"Processing chunk {chunk_num + 1}/{total_chunks} (pages {i}-{chunk_end-1})")
                     
-                    chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
+                    # Create tasks for chunk
+                    tasks = [self.process_page(context, page_num) for page_num in range(i, chunk_end)]
+                    chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
                     
-                    # Filter out errors and flatten results
+                    # Process results
                     chunk_articles = []
                     for result in chunk_results:
                         if isinstance(result, list):
                             chunk_articles.extend(result)
                     
-                    # Save chunk results and add to total
+                    # Save chunk results
                     if chunk_articles:
-                        self.save_articles(chunk_articles)
+                        self.save_articles_batch(chunk_articles)
                         total_articles.extend(chunk_articles)
                         logger.info(f"Progress: {len(total_articles)} articles collected ({(chunk_num + 1) / total_chunks * 100:.1f}%)")
                     
-                    # Small delay between chunks
-                    await asyncio.sleep(1)
+                    # Smaller delay between chunks
+                    await asyncio.sleep(0.5)
+                
+                # Save any remaining articles
+                if self.pending_articles:
+                    self.save_articles_batch(self.pending_articles, batch_size=1)
                 
             finally:
+                await context.close()
                 await browser.close()
                 
         return total_articles
@@ -239,7 +261,6 @@ class IAEAScraper:
     def scrape_articles(self, start_page: int = 0, end_page: int = 691):
         """Scrape IAEA articles using async Playwright."""
         try:
-            # Run async scraping
             return asyncio.run(self._scrape(start_page, end_page))
             
         except Exception as e:
