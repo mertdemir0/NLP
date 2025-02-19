@@ -22,7 +22,7 @@ NUCLEAR_KEYWORDS = {
     'nuclear technology', 'nuclear fusion', 'nuclear fission', 'nuclear waste',
     'uranium', 'plutonium', 'thorium', 'enrichment', 'spent fuel',
     'small modular reactor', 'smr', 'pressurized water reactor', 'pwr',
-    'boiling water reactor', 'bwr', 'nuclear fuel', 'nuclear'
+    'boiling water reactor', 'bwr', 'nuclear fuel', 'nuclear fuel cycle',
     
     # Nuclear Safety and Incidents
     'chernobyl', 'fukushima', 'three mile island', 'nuclear accident',
