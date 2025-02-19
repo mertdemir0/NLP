@@ -106,6 +106,7 @@ class IAEAScraper:
         articles = []
         page_url = f"{self.base_url}/news?topics=All&type=All&keywords=&page={page_num}"
         
+        logger.info(f"Starting to process page {page_num}")
         async with self.semaphore:
             try:
                 # Create context with two pages
@@ -117,18 +118,22 @@ class IAEAScraper:
                 article_page = await context.new_page()
                 
                 # Load listing page
+                logger.info(f"Loading page {page_num}: {page_url}")
                 await listing_page.goto(page_url, wait_until='domcontentloaded')
                 await listing_page.wait_for_selector('div.row div.grid', timeout=10000)
                 
                 # Get all articles
                 article_elements = await listing_page.query_selector_all('div.row > div.col-xs-12')
+                logger.info(f"Found {len(article_elements)} articles on page {page_num}")
                 
                 # Process articles one by one to avoid rate limiting
-                for article_elem in article_elements:
+                for i, article_elem in enumerate(article_elements):
                     try:
+                        logger.info(f"Processing article {i+1}/{len(article_elements)} on page {page_num}")
                         article = await self.process_article(article_page, article_elem, self.base_url)
                         if article:
                             articles.append(article)
+                            logger.info(f"Successfully processed article: {article['title']}")
                             # Add delay between articles
                             await asyncio.sleep(0.5)
                     except Exception as e:
@@ -139,6 +144,8 @@ class IAEAScraper:
                 await listing_page.close()
                 await article_page.close()
                 await context.close()
+                
+                logger.info(f"Completed processing page {page_num}, found {len(articles)} articles")
                 
             except Exception as e:
                 logger.error(f"Error processing page {page_num}: {str(e)}")
