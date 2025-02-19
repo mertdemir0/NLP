@@ -190,30 +190,18 @@ class IAEAScraper:
             )
             
             try:
-                # Create tasks for all pages
-                tasks = []
+                # Process pages sequentially to avoid rate limiting
                 for page_num in range(start_page, end_page + 1):
-                    task = self.process_page(browser, page_num)
-                    tasks.append(task)
-                
-                # Process pages in chunks to avoid memory issues
-                chunk_size = 5
-                for i in range(0, len(tasks), chunk_size):
-                    chunk_tasks = tasks[i:i + chunk_size]
-                    chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
+                    # Process page and get articles
+                    page_articles = await self.process_page(browser, page_num)
                     
-                    # Filter out errors and flatten results
-                    chunk_articles = []
-                    for result in chunk_results:
-                        if isinstance(result, list):
-                            chunk_articles.extend(result)
+                    # Save articles and add to total
+                    if page_articles:
+                        self.save_articles(page_articles)
+                        total_articles.extend(page_articles)
+                        logger.info(f"Saved {len(page_articles)} articles from page {page_num}")
                     
-                    # Save chunk results and add to total
-                    if chunk_articles:
-                        self.save_articles(chunk_articles)
-                        total_articles.extend(chunk_articles)
-                    
-                    # Small delay between chunks
+                    # Add delay between pages
                     await asyncio.sleep(1)
                 
             finally:
