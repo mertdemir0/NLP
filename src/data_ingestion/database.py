@@ -22,11 +22,17 @@ class RawArticle(Base):
     
 def init_db(database_name='IAEA'):
     """Initialize the database connection."""
-    # Create database directory if it doesn't exist
-    os.makedirs('data/db', exist_ok=True)
+    # Get the project root directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(current_dir))
     
-    # Create SQLite database
-    engine = create_engine(f'sqlite:///data/db/{database_name}.db')
+    # Create database directory if it doesn't exist
+    db_dir = os.path.join(project_root, 'data', 'db')
+    os.makedirs(db_dir, exist_ok=True)
+    
+    # Create SQLite database with absolute path
+    db_path = os.path.join(db_dir, f'{database_name}.db')
+    engine = create_engine(f'sqlite:///{db_path}')
     
     # Create tables
     Base.metadata.create_all(engine)
