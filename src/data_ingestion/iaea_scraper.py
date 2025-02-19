@@ -1,12 +1,13 @@
 """IAEA News Scraper for collecting articles from IAEA website."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import os
 import re
 import asyncio
 from typing import List, Dict
 from playwright.async_api import async_playwright
+from sqlalchemy.orm import Session
 from .database import init_db, RawArticle
 
 # Configure logging
@@ -25,6 +26,11 @@ class IAEAScraper:
         self.base_url = "https://www.iaea.org"
         self.db_session = init_db()
         self.semaphore = asyncio.Semaphore(max_concurrent)
+        
+    def __del__(self):
+        """Clean up resources."""
+        if hasattr(self, 'db_session'):
+            self.db_session.close()
     
     async def extract_article_content(self, page, href: str) -> Dict:
         """Extract content from article page."""
