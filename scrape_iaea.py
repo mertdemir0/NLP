@@ -3,6 +3,12 @@ import os
 from src.data_ingestion.iaea_scraper import IAEAScraper
 import logging
 
+# Configure logging to see detailed progress
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 # Ensure data directory exists
 os.makedirs('data', exist_ok=True)
 
@@ -11,11 +17,11 @@ def main():
     # Initialize scraper with conservative settings
     scraper = IAEAScraper(
         max_workers=3,  # Number of parallel workers
-        chunk_size=5    # Pages per chunk
+        chunk_size=3    # Pages per chunk
     )
     
-    # Test with first 5 pages
-    articles = scraper.scrape_articles(start_page=0, end_page=4)
+    # Test with first 3 pages
+    articles = scraper.scrape_articles(start_page=0, end_page=2)  # 0, 1, 2 = 3 pages
     
     logging.info(f"Scraping complete! Found {len(articles)} articles")
 
