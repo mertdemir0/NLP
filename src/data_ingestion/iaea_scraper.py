@@ -2,12 +2,10 @@
 import logging
 from datetime import datetime
 import time
-import random
-import threading
 import os
 import re
-from typing import List, Dict, Optional
-from playwright.sync_api import sync_playwright, Page, Browser
+from typing import List, Dict
+from playwright.sync_api import sync_playwright
 from .database import init_db, RawArticle
 
 # Configure logging
@@ -25,8 +23,6 @@ class IAEAScraper:
         self.max_workers = max_workers
         self.chunk_size = chunk_size
         self.base_url = "https://www.iaea.org"
-        self.processed_urls = set()
-        self.url_lock = threading.Lock()
         
         # Initialize database
         self.db_session = init_db()
@@ -34,7 +30,7 @@ class IAEAScraper:
         # Initialize Playwright
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
-            headless=True
+            headless=False  # Set to False to see what's happening
         )
         
         # Create a new context
@@ -54,40 +50,72 @@ class IAEAScraper:
         
         try:
             # Navigate to the page
-            self.page.goto(page_url, wait_until='networkidle')
-            time.sleep(2)  # Wait for any dynamic content
+            self.page.goto(page_url)
+            # Wait for articles to load
+            self.page.wait_for_selector('div.view-content', timeout=10000)
             
-            # Get all article links
-            article_elements = self.page.locator('div.views-row article').all()
-            logger.info(f"Found {len(article_elements)} article elements on page {page}")
+            # Get the page HTML for debugging
+            html = self.page.content()
+            logger.info(f"Page HTML length: {len(html)}")
+            
+            # Try different selectors
+            selectors = [
+                'div.views-row article',
+                'div.view-content article',
+                'div.views-row',
+                'article.node--type-news'
+            ]
+            
+            article_elements = []
+            for selector in selectors:
+                article_elements = self.page.locator(selector).all()
+                logger.info(f"Selector '{selector}' found {len(article_elements)} elements")
+                if article_elements:
+                    logger.info(f"Using selector: {selector}")
+                    break
+            
+            if not article_elements:
+                logger.error("No article elements found with any selector")
+                return articles
             
             for article in article_elements:
                 try:
-                    # Get the article link
-                    link_elem = article.locator('h2 a').first
-                    if not link_elem:
+                    # Debug the article HTML
+                    article_html = article.evaluate('el => el.outerHTML')
+                    logger.info(f"Article HTML: {article_html[:200]}...")  # First 200 chars
+                    
+                    # Get title and link
+                    title_elem = article.locator('h2 a, h3 a').first
+                    if not title_elem:
+                        logger.warning("No title element found")
                         continue
-                        
-                    href = link_elem.get_attribute('href')
+                    
+                    title = title_elem.text_content().strip()
+                    href = title_elem.get_attribute('href')
+                    
                     if not href:
+                        logger.warning(f"No href found for article: {title}")
                         continue
-                        
+                    
                     # Get the full URL
                     if not href.startswith('http'):
                         href = f"{self.base_url}{href}"
                     
-                    # Get title
-                    title = link_elem.text_content().strip()
-                    
                     # Get date
-                    date = article.locator('div.date-display-single').text_content().strip()
+                    date = ""
+                    date_elem = article.locator('div.date-display-single, time, span.date').first
+                    if date_elem:
+                        date = date_elem.text_content().strip()
                     
                     # Get summary
-                    summary = article.locator('div.field--name-body').text_content().strip()
+                    summary = ""
+                    summary_elem = article.locator('div.field--name-body, div.field--type-text-with-summary').first
+                    if summary_elem:
+                        summary = summary_elem.text_content().strip()
                     
                     # Get topics
                     topics = []
-                    topic_elements = article.locator('div.field--name-field-topics a').all()
+                    topic_elements = article.locator('div.field--name-field-topics a, div.topics a').all()
                     for topic in topic_elements:
                         topic_text = topic.text_content().strip()
                         if topic_text:
@@ -95,7 +123,7 @@ class IAEAScraper:
                     
                     article_data = {
                         'title': title,
-                        'content': summary,  # We'll use summary for now, can fetch full content later
+                        'content': summary if summary else "Summary not available",
                         'url': href,
                         'date': date,
                         'topics': topics,
@@ -106,12 +134,13 @@ class IAEAScraper:
                     logger.info(f"Extracted article: {title}")
                     
                 except Exception as e:
-                    logger.error(f"Error processing article on page {page}: {str(e)}")
+                    logger.error(f"Error processing article: {str(e)}")
                     continue
             
         except Exception as e:
             logger.error(f"Error processing page {page}: {str(e)}")
         
+        logger.info(f"Found {len(articles)} articles on page {page}")
         return articles
     
     def scrape_articles(self, start_page: int = 0, end_page: int = 691) -> List[Dict]:
@@ -124,7 +153,7 @@ class IAEAScraper:
                 if articles:
                     all_articles.extend(articles)
                     self._save_progress(articles)
-                time.sleep(2)  # Be nice to the server
+                time.sleep(2)
                 
         except Exception as e:
             logger.error(f"Error during scraping: {str(e)}")
