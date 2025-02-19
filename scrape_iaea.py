@@ -1,7 +1,6 @@
 """Script to run the IAEA scraper."""
 from src.data_ingestion.iaea_scraper import IAEAScraper
 import logging
-import os
 
 # Configure logging
 logging.basicConfig(
@@ -19,8 +18,9 @@ def main():
         # Initialize scraper with 10 concurrent tasks
         scraper = IAEAScraper(max_concurrent=10)
         
-        # Scrape 5 pages (0-4)
-        articles = scraper.scrape_articles(start_page=0, end_page=4)
+        # Scrape all pages (0-691)
+        logger.info("Starting full scrape of IAEA news articles...")
+        articles = scraper.scrape_articles(start_page=0, end_page=691)
         
         logger.info(f"Scraping complete! Found {len(articles)} articles")
         
