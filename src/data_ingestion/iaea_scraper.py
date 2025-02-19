@@ -191,6 +191,8 @@ class IAEAScraper:
     async def _scrape(self, start_page: int = 0, end_page: int = 691):
         """Internal async scraping method."""
         total_articles = []
+        total_pages = end_page - start_page + 1
+        
         async with async_playwright() as playwright:
             # Launch browser with optimized settings
             browser = await playwright.chromium.launch(
@@ -207,8 +209,11 @@ class IAEAScraper:
                 
                 # Process pages in chunks to avoid memory issues
                 chunk_size = 5
-                for i in range(0, len(tasks), chunk_size):
+                total_chunks = (len(tasks) + chunk_size - 1) // chunk_size
+                for chunk_num, i in enumerate(range(0, len(tasks), chunk_size)):
                     chunk_tasks = tasks[i:i + chunk_size]
+                    logger.info(f"Processing chunk {chunk_num + 1}/{total_chunks} (pages {i}-{min(i + chunk_size - 1, end_page)})")
+                    
                     chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
                     
                     # Filter out errors and flatten results
@@ -221,6 +226,7 @@ class IAEAScraper:
                     if chunk_articles:
                         self.save_articles(chunk_articles)
                         total_articles.extend(chunk_articles)
+                        logger.info(f"Progress: {len(total_articles)} articles collected ({(chunk_num + 1) / total_chunks * 100:.1f}%)")
                     
                     # Small delay between chunks
                     await asyncio.sleep(1)
