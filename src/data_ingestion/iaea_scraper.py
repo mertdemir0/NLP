@@ -30,7 +30,7 @@ class IAEAScraper:
         # Initialize Playwright
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
-            headless=False  # Set to False to see what's happening
+            headless=True  # Run in headless mode
         )
         
         # Create a new context
