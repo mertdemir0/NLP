@@ -1,5 +1,5 @@
 """Script to run the IAEA scraper."""
-from iaea_scraper import IAEAScraper
+from .iaea_scraper import IAEAScraper
 import logging
 
 def main():
