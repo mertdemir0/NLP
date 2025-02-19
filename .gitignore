@@ -285,7 +285,7 @@ $RECYCLE.BIN/
 *.msix
 *.msm
 *.msp
-*.
+*.db-jout
 # Windows shortcuts
 *.lnk
 
