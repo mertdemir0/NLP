@@ -44,24 +44,38 @@ class IAEAScraper:
     def _process_page(self, page: int) -> List[Dict]:
         """Process a single IAEA page."""
         articles = []
-        page_url = f"{self.base_url}/newscenter/news?page={page}"
+        page_url = f"{self.base_url}/news?topics=All&type=All&keywords=&page={page}"
         
         logger.info(f"Processing page {page}: {page_url}")
         
         try:
             # Navigate to the page
             self.page.goto(page_url)
-            # Wait for articles to load
-            self.page.wait_for_selector('div.view-content', timeout=10000)
+            # Wait for articles container to load
+            self.page.wait_for_selector('div.row div.grid', timeout=10000)
             
-            # Get all article links from the main content area
-            article_links = self.page.locator('div.view-content h2 a, div.view-content h3 a').all()
-            logger.info(f"Found {len(article_links)} article links on page {page}")
+            # Get all article grid elements
+            article_elements = self.page.locator('div.row > div.col-xs-12').all()
+            logger.info(f"Found {len(article_elements)} article elements on page {page}")
             
-            for link in article_links:
+            for article in article_elements:
                 try:
-                    title = link.text_content().strip()
-                    href = link.get_attribute('href')
+                    # Get article type
+                    type_elem = article.locator('div.content-type-label-wrapper').first
+                    article_type = type_elem.text_content().strip() if type_elem else "Unknown"
+                    
+                    # Get date
+                    date_elem = article.locator('span.dateline-published').first
+                    date = date_elem.text_content().strip() if date_elem else ""
+                    
+                    # Get title and link
+                    title_elem = article.locator('h4 a').first
+                    if not title_elem:
+                        logger.warning("No title element found")
+                        continue
+                    
+                    title = title_elem.text_content().strip()
+                    href = title_elem.get_attribute('href')
                     
                     if not href:
                         logger.warning(f"No href found for article: {title}")
@@ -71,23 +85,27 @@ class IAEAScraper:
                     if not href.startswith('http'):
                         href = f"{self.base_url}{href}"
                     
-                    logger.info(f"Processing article: {title} at {href}")
+                    logger.info(f"Processing {article_type}: {title}")
                     
                     # Navigate to the article page
                     self.page.goto(href)
                     self.page.wait_for_selector('article', timeout=10000)
                     
-                    # Get date
-                    date = ""
-                    date_elem = self.page.locator('div.date-display-single, time.datetime').first
-                    if date_elem:
-                        date = date_elem.text_content().strip()
-                    
-                    # Get content
+                    # Get content based on article type
                     content = ""
-                    content_elem = self.page.locator('div.field--name-body').first
-                    if content_elem:
-                        content = content_elem.text_content().strip()
+                    content_selectors = [
+                        'div.field--name-body',
+                        'div.field--type-text-with-summary',
+                        'div.news-story-text',
+                        'article div.text'
+                    ]
+                    
+                    for selector in content_selectors:
+                        content_elem = self.page.locator(selector).first
+                        if content_elem:
+                            content = content_elem.text_content().strip()
+                            if content:
+                                break
                     
                     # Get topics
                     topics = []
@@ -103,21 +121,22 @@ class IAEAScraper:
                         'url': href,
                         'date': date,
                         'topics': topics,
-                        'source': 'IAEA'
+                        'source': 'IAEA',
+                        'type': article_type
                     }
                     
                     articles.append(article_data)
-                    logger.info(f"Successfully extracted article: {title}")
+                    logger.info(f"Successfully extracted {article_type}: {title}")
                     
                     # Go back to the listing page
                     self.page.goto(page_url)
-                    self.page.wait_for_selector('div.view-content', timeout=10000)
+                    self.page.wait_for_selector('div.row div.grid', timeout=10000)
                     
                 except Exception as e:
                     logger.error(f"Error processing article: {str(e)}")
                     # Go back to the listing page
                     self.page.goto(page_url)
-                    self.page.wait_for_selector('div.view-content', timeout=10000)
+                    self.page.wait_for_selector('div.row div.grid', timeout=10000)
                     continue
             
         except Exception as e:

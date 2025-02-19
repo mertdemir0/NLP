@@ -17,6 +17,7 @@ class RawArticle(Base):
     date = Column(String(100))  # Keep as string initially since date formats might vary
     topics = Column(JSON)  # Store topics as JSON array
     source = Column(String(50))
+    type = Column(String(50))  # Store article type (News Story, Press Release, etc.)
     created_at = Column(DateTime)
     
 def init_db(database_name='IAEA'):
