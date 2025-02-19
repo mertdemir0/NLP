@@ -1,6 +1,7 @@
 """Script to run the IAEA scraper."""
 from src.data_ingestion.iaea_scraper import IAEAScraper
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(
