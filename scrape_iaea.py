@@ -16,14 +16,17 @@ os.makedirs('data', exist_ok=True)
 def main():
     """Run the IAEA scraper."""
     try:
-        # Initialize scraper with 10 concurrent tasks
-        scraper = IAEAScraper(max_concurrent=10)
+        # Initialize scraper
+        scraper = IAEAScraper()
         
-        # Scrape all pages (0-691)
-        logger.info("Starting full scrape of IAEA news articles...")
-        articles = scraper.scrape_articles(start_page=0, end_page=691)
+        # Scrape first page only
+        logger.info("Scraping first page of IAEA news articles...")
+        articles = scraper.scrape_page(0)
         
-        logger.info(f"Scraping complete! Found {len(articles)} articles")
+        # Save articles
+        if articles:
+            logger.info(f"Found {len(articles)} articles, saving to database...")
+            scraper.save_articles(articles)
         
     except Exception as e:
         logger.error(f"Error running scraper: {str(e)}")
