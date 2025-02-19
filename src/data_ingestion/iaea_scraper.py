@@ -1,5 +1,4 @@
 """IAEA News Scraper for collecting articles from IAEA website."""
-import json
 import logging
 from datetime import datetime
 import time
@@ -9,6 +8,7 @@ import os
 import re
 from typing import List, Dict, Optional
 from playwright.sync_api import sync_playwright, Page, Browser
+from .database import init_db, RawArticle
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +32,9 @@ class IAEAScraper:
         self.base_url = "https://www.iaea.org"
         self.processed_urls = set()
         self.url_lock = threading.Lock()
+        
+        # Initialize database
+        self.db_session = init_db()
         
         # Initialize Playwright
         self.playwright = sync_playwright().start()
@@ -340,20 +343,28 @@ class IAEAScraper:
         return all_articles
     
     def _save_progress(self, articles: List[Dict]):
-        """Save scraped articles to a JSON file."""
+        """Save scraped articles to the database."""
         if not articles:
             return
             
-        # Create data directory if it doesn't exist
-        os.makedirs('data', exist_ok=True)
-        
-        # Create timestamp for the filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"data/iaea_articles_{timestamp}.json"
-        
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(articles, f, ensure_ascii=False, indent=2)
-            logger.info(f"Progress saved to: {filename}")
+            for article in articles:
+                # Check if article already exists
+                existing = self.db_session.query(RawArticle).filter_by(url=article['url']).first()
+                if not existing:
+                    db_article = RawArticle(
+                        title=article['title'],
+                        content=article['content'],
+                        url=article['url'],
+                        date=article['date'],
+                        topics=article['topics'],
+                        source=article['source'],
+                        created_at=datetime.now()
+                    )
+                    self.db_session.add(db_article)
+            
+            self.db_session.commit()
+            logger.info(f"Saved {len(articles)} articles to database")
         except Exception as e:
-            logger.error(f"Error saving progress: {str(e)}")
+            self.db_session.rollback()
+            logger.error(f"Error saving to database: {str(e)}")
