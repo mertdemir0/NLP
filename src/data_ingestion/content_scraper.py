@@ -50,7 +50,7 @@ NUCLEAR_KEYWORDS = {
     # Nuclear Materials and Elements
     'radioactive', 'isotope', 'nuclear material', 'fissile material',
     'heavy water', 'deuterium', 'tritium', 'nuclear fuel cycle',
-    'nuclear grade', 'nuclear waste'
+    'nuclear grade', 'nuclear waste', 'radium'
 }
 
 class ContentScraper:
