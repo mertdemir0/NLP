@@ -106,7 +106,6 @@ class IAEAScraper:
         articles = []
         page_url = f"{self.base_url}/news?topics=All&type=All&keywords=&page={page_num}"
         
-        logger.info(f"Starting to process page {page_num}")
         async with self.semaphore:
             try:
                 # Create context with two pages
@@ -118,22 +117,18 @@ class IAEAScraper:
                 article_page = await context.new_page()
                 
                 # Load listing page
-                logger.info(f"Loading page {page_num}: {page_url}")
                 await listing_page.goto(page_url, wait_until='domcontentloaded')
                 await listing_page.wait_for_selector('div.row div.grid', timeout=10000)
                 
                 # Get all articles
                 article_elements = await listing_page.query_selector_all('div.row > div.col-xs-12')
-                logger.info(f"Found {len(article_elements)} articles on page {page_num}")
                 
                 # Process articles one by one to avoid rate limiting
-                for i, article_elem in enumerate(article_elements):
+                for article_elem in article_elements:
                     try:
-                        logger.info(f"Processing article {i+1}/{len(article_elements)} on page {page_num}")
                         article = await self.process_article(article_page, article_elem, self.base_url)
                         if article:
                             articles.append(article)
-                            logger.info(f"Successfully processed article: {article['title']}")
                             # Add delay between articles
                             await asyncio.sleep(0.5)
                     except Exception as e:
@@ -144,8 +139,6 @@ class IAEAScraper:
                 await listing_page.close()
                 await article_page.close()
                 await context.close()
-                
-                logger.info(f"Completed processing page {page_num}, found {len(articles)} articles")
                 
             except Exception as e:
                 logger.error(f"Error processing page {page_num}: {str(e)}")
@@ -190,18 +183,30 @@ class IAEAScraper:
             )
             
             try:
-                # Process pages sequentially to avoid rate limiting
+                # Create tasks for all pages
+                tasks = []
                 for page_num in range(start_page, end_page + 1):
-                    # Process page and get articles
-                    page_articles = await self.process_page(browser, page_num)
+                    task = self.process_page(browser, page_num)
+                    tasks.append(task)
+                
+                # Process pages in chunks to avoid memory issues
+                chunk_size = 5
+                for i in range(0, len(tasks), chunk_size):
+                    chunk_tasks = tasks[i:i + chunk_size]
+                    chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
                     
-                    # Save articles and add to total
-                    if page_articles:
-                        self.save_articles(page_articles)
-                        total_articles.extend(page_articles)
-                        logger.info(f"Saved {len(page_articles)} articles from page {page_num}")
+                    # Filter out errors and flatten results
+                    chunk_articles = []
+                    for result in chunk_results:
+                        if isinstance(result, list):
+                            chunk_articles.extend(result)
                     
-                    # Add delay between pages
+                    # Save chunk results and add to total
+                    if chunk_articles:
+                        self.save_articles(chunk_articles)
+                        total_articles.extend(chunk_articles)
+                    
+                    # Small delay between chunks
                     await asyncio.sleep(1)
                 
             finally:
