@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Nuclear-related keywords
 NUCLEAR_KEYWORDS = {
     # Nuclear Power and Technology
-    'nuclear power', 'nuclear energy', 'nuclear reactor', 'nuclear plant',
+    'nuclear','nuclear power', 'nuclear energy', 'nuclear reactor', 'nuclear plant',
     'nuclear technology', 'nuclear fusion', 'nuclear fission', 'nuclear waste',
     'uranium', 'plutonium', 'thorium', 'enrichment', 'spent fuel',
     'small modular reactor', 'smr', 'pressurized water reactor', 'pwr',
