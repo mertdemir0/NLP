@@ -123,15 +123,17 @@ class IAEAScraper:
                 # Get all articles
                 article_elements = await listing_page.query_selector_all('div.row > div.col-xs-12')
                 
-                # Process articles concurrently
-                tasks = []
+                # Process articles one by one to avoid rate limiting
                 for article_elem in article_elements:
-                    task = self.process_article(article_page, article_elem, self.base_url)
-                    tasks.append(task)
-                
-                # Wait for all articles to be processed
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                articles = [r for r in results if r is not None and not isinstance(r, Exception)]
+                    try:
+                        article = await self.process_article(article_page, article_elem, self.base_url)
+                        if article:
+                            articles.append(article)
+                            # Add delay between articles
+                            await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.error(f"Error processing article: {str(e)}")
+                        continue
                 
                 # Clean up
                 await listing_page.close()
