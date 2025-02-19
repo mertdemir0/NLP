@@ -86,24 +86,40 @@ class ContentScraper:
                     logger.warning(f"Timeout on URL {url}, attempt {attempt + 1}/{max_retries}")
                     await asyncio.sleep(2)
             
-            # Try different content selectors
+            # Wait for and get the main content
             content = ""
-            for selector in ['div.field--name-body', 'div.field--type-text-with-summary', 'div.news-story-text']:
-                try:
-                    content_elem = await page.wait_for_selector(selector, timeout=5000)
-                    if content_elem:
-                        content = await content_elem.text_content()
-                        if content.strip():
-                            break
-                except:
-                    continue
+            try:
+                # First try to get the news-story-body element
+                body_elem = await page.wait_for_selector('div.news-story-body div.field-newsstory-body', timeout=5000)
+                if body_elem:
+                    # Get all paragraphs and list items
+                    paragraphs = await body_elem.query_selector_all('p, li')
+                    content_parts = []
+                    
+                    for p in paragraphs:
+                        text = await p.text_content()
+                        if text.strip():
+                            content_parts.append(text.strip())
+                    
+                    content = '\n\n'.join(content_parts)
+            except Exception as e:
+                # Fallback to other selectors if news-story-body not found
+                for selector in ['div.field--name-body', 'div.field--type-text-with-summary', 'div.news-story-text']:
+                    try:
+                        content_elem = await page.wait_for_selector(selector, timeout=3000)
+                        if content_elem:
+                            content = await content_elem.text_content()
+                            if content.strip():
+                                break
+                    except:
+                        continue
             
             return content.strip() if content else "Content not available"
             
         except Exception as e:
             logger.error(f"Error extracting content from {url}: {str(e)}")
             return "Error extracting content"
-    
+
     async def process_articles_chunk(self, articles: List[RawArticle]) -> None:
         """Process a chunk of articles to extract their content."""
         async with async_playwright() as playwright:
