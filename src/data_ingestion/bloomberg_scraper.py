@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict
 import aiohttp
+from ..config import SERPAPI_KEY
 from .database import init_db, BloombergArticle
 
 # Configure logging
@@ -19,7 +20,7 @@ class BloombergScraper:
     def __init__(self):
         """Initialize the Bloomberg scraper."""
         self.db_session = init_db()
-        self.api_key = "YOUR_SERPAPI_KEY"  # Replace with your SerpAPI key
+        self.api_key = SERPAPI_KEY
         self.seen_urls = set()
         
     def __del__(self):
