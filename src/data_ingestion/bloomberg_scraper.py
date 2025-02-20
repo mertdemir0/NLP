@@ -141,8 +141,8 @@ class BloombergScraper:
             self.db_session.rollback()
             logger.error(f"Error saving to database: {str(e)}")
     
-    async def scrape_all_results(self):
-        """Scrape all Google search results for Bloomberg nuclear articles."""
+    async def scrape_all_results(self, max_pages: int = None):
+        """Scrape Google search results for Bloomberg nuclear articles."""
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(
                 headless=True,
@@ -164,9 +164,16 @@ class BloombergScraper:
                 # Process search results pages
                 start_index = 0
                 total_articles = []
+                page_count = 0
                 
                 while True:
-                    logger.info(f"Processing search results page {start_index // 100 + 1}")
+                    current_page = start_index // 100 + 1
+                    logger.info(f"Processing search results page {current_page}")
+                    
+                    # Check if we've reached max pages
+                    if max_pages and current_page > max_pages:
+                        logger.info(f"Reached maximum pages ({max_pages}), stopping...")
+                        break
                     
                     # Scrape current page
                     articles = await self.scrape_search_page(page, start_index)
@@ -181,15 +188,16 @@ class BloombergScraper:
                     
                     # Move to next page
                     start_index += 100
+                    page_count += 1
                     
                     # Add delay between pages
                     await asyncio.sleep(2)
                 
-                logger.info(f"Finished scraping. Found {len(total_articles)} total articles")
+                logger.info(f"Finished scraping {page_count} pages. Found {len(total_articles)} total articles")
                 
             finally:
                 await browser.close()
     
-    def run(self):
+    def run(self, max_pages: int = None):
         """Run the Bloomberg scraper."""
-        asyncio.run(self.scrape_all_results())
+        asyncio.run(self.scrape_all_results(max_pages))
