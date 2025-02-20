@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 def main():
     """Run the Bloomberg scraper."""
     try:
-        # Initialize and run scraper with 10 pages limit
+        # Initialize and run scraper with 100 pages
         scraper = BloombergScraper()
-        scraper.run(max_pages=10)
+        scraper.run(max_pages=100)
         
     except Exception as e:
         logger.error(f"Error running Bloomberg scraper: {str(e)}")
