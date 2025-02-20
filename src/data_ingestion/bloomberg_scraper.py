@@ -1,12 +1,12 @@
 """Scraper for Bloomberg articles using SerpAPI."""
 import logging
-import asyncio
 import os
 from datetime import datetime
 from typing import List, Dict
-import aiohttp
+from serpapi import GoogleSearch
 from dotenv import load_dotenv
 from .database import init_db, BloombergArticle
+import time
 
 # Load environment variables
 load_dotenv()
@@ -44,65 +44,58 @@ class BloombergScraper:
             logger.error(f"Error getting existing URLs: {str(e)}")
             return set()
     
-    async def fetch_search_results(self, start: int = 0) -> List[Dict]:
+    def fetch_search_results(self, start: int = 0) -> List[Dict]:
         """Fetch search results from SerpAPI."""
         articles = []
         
         try:
             params = {
-                'api_key': self.api_key,
-                'engine': 'google',
-                'q': 'site:bloomberg.com nuclear',
-                'google_domain': 'google.com',
-                'gl': 'us',
-                'hl': 'en',
-                'start': start,
-                'num': 100,
-                'filter': '0'
+                "api_key": self.api_key,
+                "engine": "google",
+                "q": 'site:bloomberg.com nuclear',
+                "google_domain": "google.com",
+                "gl": "us",
+                "hl": "en",
+                "start": start,
+                "num": 100
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get('https://serpapi.com/search.json', params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        logger.debug(f"API Response: {data}")  # Debug log
-                        
-                        # Process organic results
-                        organic_results = data.get('organic_results', [])
-                        if not organic_results:
-                            logger.warning(f"No organic results found in API response. Response: {data}")
-                            return []
-                            
-                        for result in organic_results:
-                            try:
-                                url = result.get('link', '')
-                                
-                                # Verify it's a Bloomberg URL
-                                if not url.startswith('https://www.bloomberg.com'):
-                                    continue
-                                
-                                # Skip if URL already seen
-                                if url in self.seen_urls:
-                                    continue
-                                
-                                self.seen_urls.add(url)
-                                
-                                article_data = {
-                                    'title': result.get('title', ''),
-                                    'url': url,
-                                    'summary': result.get('snippet', ''),
-                                    'date': result.get('date', '')
-                                }
-                                
-                                articles.append(article_data)
-                                logger.info(f"Found article: {article_data['title']}")
-                                
-                            except Exception as e:
-                                logger.error(f"Error processing search result: {str(e)}")
-                                continue
-                    else:
-                        response_text = await response.text()
-                        logger.error(f"API request failed with status {response.status}. Response: {response_text}")
+            search = GoogleSearch(params)
+            data = search.get_dict()
+            
+            # Process organic results
+            organic_results = data.get('organic_results', [])
+            if not organic_results:
+                logger.warning(f"No organic results found in API response. Response: {data}")
+                return []
+                
+            for result in organic_results:
+                try:
+                    url = result.get('link', '')
+                    
+                    # Verify it's a Bloomberg URL
+                    if not url.startswith('https://www.bloomberg.com'):
+                        continue
+                    
+                    # Skip if URL already seen
+                    if url in self.seen_urls:
+                        continue
+                    
+                    self.seen_urls.add(url)
+                    
+                    article_data = {
+                        'title': result.get('title', ''),
+                        'url': url,
+                        'summary': result.get('snippet', ''),
+                        'date': result.get('date', '')
+                    }
+                    
+                    articles.append(article_data)
+                    logger.info(f"Found article: {article_data['title']}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing search result: {str(e)}")
+                    continue
             
             return articles
             
@@ -142,7 +135,7 @@ class BloombergScraper:
             self.db_session.rollback()
             logger.error(f"Error saving to database: {str(e)}")
     
-    async def scrape_all_results(self, max_pages: int = None):
+    def scrape_all_results(self, max_pages: int = None):
         """Scrape search results for Bloomberg nuclear articles."""
         try:
             # Load existing URLs
@@ -163,7 +156,7 @@ class BloombergScraper:
                     break
                 
                 # Fetch current page
-                articles = await self.fetch_search_results(start_index)
+                articles = self.fetch_search_results(start_index)
                 
                 # If no more results or error, break
                 if not articles:
@@ -179,7 +172,7 @@ class BloombergScraper:
                 page_count += 1
                 
                 # Add delay between pages
-                await asyncio.sleep(2)
+                time.sleep(2)
             
             logger.info(f"Finished scraping {page_count} pages. Found {len(total_articles)} total articles")
             
@@ -188,4 +181,4 @@ class BloombergScraper:
     
     def run(self, max_pages: int = None):
         """Run the Bloomberg scraper."""
-        asyncio.run(self.scrape_all_results(max_pages))
+        self.scrape_all_results(max_pages)
