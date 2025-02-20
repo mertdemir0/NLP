@@ -1,10 +1,15 @@
 """Scraper for Bloomberg articles using SerpAPI."""
 import logging
 import asyncio
+import os
 from datetime import datetime
 from typing import List, Dict
 import aiohttp
+from dotenv import load_dotenv
 from .database import init_db, BloombergArticle
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +24,9 @@ class BloombergScraper:
     def __init__(self):
         """Initialize the Bloomberg scraper."""
         self.db_session = init_db()
-        self.api_key = "YOUR_SERPAPI_KEY"  # Replace with your SerpAPI key
+        self.api_key = os.getenv('SERPAPI_KEY')
+        if not self.api_key:
+            raise ValueError("SERPAPI_KEY environment variable is not set")
         self.seen_urls = set()
         
     def __del__(self):
