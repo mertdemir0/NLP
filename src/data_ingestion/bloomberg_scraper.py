@@ -28,7 +28,7 @@ class BloombergScraper:
         if not self.api_key:
             raise ValueError("SERPAPI_KEY environment variable is not set")
         self.seen_urls = set()
-        
+    
     def __del__(self):
         """Clean up resources."""
         if hasattr(self, 'db_session'):
@@ -62,12 +62,18 @@ class BloombergScraper:
             }
             
             async with aiohttp.ClientSession() as session:
-                async with session.get('https://serpapi.com/search', params=params) as response:
+                async with session.get('https://serpapi.com/search.json', params=params) as response:
                     if response.status == 200:
                         data = await response.json()
+                        logger.debug(f"API Response: {data}")  # Debug log
                         
                         # Process organic results
-                        for result in data.get('organic_results', []):
+                        organic_results = data.get('organic_results', [])
+                        if not organic_results:
+                            logger.warning(f"No organic results found in API response. Response: {data}")
+                            return []
+                            
+                        for result in organic_results:
                             try:
                                 url = result.get('link', '')
                                 
@@ -95,7 +101,8 @@ class BloombergScraper:
                                 logger.error(f"Error processing search result: {str(e)}")
                                 continue
                     else:
-                        logger.error(f"API request failed with status {response.status}")
+                        response_text = await response.text()
+                        logger.error(f"API request failed with status {response.status}. Response: {response_text}")
             
             return articles
             
@@ -160,6 +167,7 @@ class BloombergScraper:
                 
                 # If no more results or error, break
                 if not articles:
+                    logger.warning(f"No articles found on page {current_page}, stopping...")
                     break
                 
                 # Save articles and continue
