@@ -152,6 +152,7 @@ class ContentScraper:
                 # Process articles using the page pool
                 current_page = 0
                 updated_count = 0
+                new_articles = []
                 
                 for article in articles:
                     try:
