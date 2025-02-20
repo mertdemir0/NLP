@@ -1,11 +1,10 @@
-"""Content scraper for nuclear-related IAEA articles."""
+"""Content scraper for IAEA articles."""
 import logging
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Set
 from playwright.async_api import async_playwright, TimeoutError
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
 from .database import init_db, RawArticle
 
 # Configure logging
@@ -15,45 +14,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Nuclear-related keywords
-NUCLEAR_KEYWORDS = {
-    # Nuclear Power and Technology
-    'nuclear','nuclear power', 'nuclear energy', 'nuclear reactor', 'nuclear plant',
-    'nuclear technology', 'nuclear fusion', 'nuclear fission', 'nuclear waste',
-    'uranium', 'plutonium', 'thorium', 'enrichment', 'spent fuel',
-    'small modular reactor', 'smr', 'pressurized water reactor', 'pwr',
-    'boiling water reactor', 'bwr', 'nuclear fuel', 'nuclear fuel cycle',
-    'nuclear power plant', 'nuclear power station', 'nuclear power system',
-    'Nuclear Energy','Nuclear','Fukushima'    # Nuclear Safety and Incidents
-    'chernobyl', 'fukushima', 'three mile island', 'nuclear accident',
-    'nuclear safety', 'nuclear security', 'radiation leak', 'meltdown',
-    'nuclear contamination', 'nuclear disaster', 'radiation exposure',
-    'nuclear emergency', 'nuclear incident', 'radiation protection',
-    
-    # Nuclear Research and Applications
-    'nuclear medicine', 'radioisotope', 'nuclear research', 'nuclear science',
-    'nuclear physics', 'particle accelerator', 'nuclear diagnostic',
-    'nuclear imaging', 'radiotherapy', 'nuclear treatment',
-    
-    # Nuclear Policy and Safeguards
-    'nuclear proliferation', 'nuclear safeguard', 'nuclear treaty',
-    'nuclear weapon', 'nuclear deterrence', 'nuclear disarmament',
-    'nuclear test', 'nuclear ban', 'nuclear inspection', 'nuclear agreement',
-    'nuclear deal', 'nuclear protocol', 'nuclear verification',
-    
-    # Nuclear Facilities and Infrastructure
-    'nuclear facility', 'nuclear site', 'nuclear storage', 'nuclear repository',
-    'nuclear laboratory', 'nuclear complex', 'nuclear installation',
-    'nuclear infrastructure', 'nuclear station',
-    
-    # Nuclear Materials and Elements
-    'radioactive', 'isotope', 'nuclear material', 'fissile material',
-    'heavy water', 'deuterium', 'tritium', 'nuclear fuel cycle',
-    'nuclear grade', 'nuclear waste', 'radium'
-}
-
 class ContentScraper:
-    """Scraper for extracting content from nuclear-related articles."""
+    """Scraper for extracting content from IAEA articles."""
     
     def __init__(self, chunk_size: int = 100):
         """Initialize the content scraper."""
@@ -64,11 +26,6 @@ class ContentScraper:
         """Clean up resources."""
         if hasattr(self, 'db_session'):
             self.db_session.close()
-    
-    def is_nuclear_related(self, title: str) -> bool:
-        """Check if an article is nuclear-related based on its title."""
-        title_lower = title.lower()
-        return any(keyword in title_lower for keyword in NUCLEAR_KEYWORDS)
     
     async def extract_article_content(self, page, url: str) -> str:
         """Extract content from an article page."""
@@ -151,47 +108,35 @@ class ContentScraper:
                 
                 # Process articles using the page pool
                 current_page = 0
-                new_articles = []
+                updated_count = 0
                 
                 for article in articles:
                     try:
-                        if self.is_nuclear_related(article.title):
-                            logger.info(f"Processing nuclear-related article: {article.title}")
-                            
-                            # Use the next available page
-                            page = pages[current_page]
-                            current_page = (current_page + 1) % len(pages)
-                            
-                            content = await self.extract_article_content(page, article.url)
-                            
-                            # Create a new article with the same data but different content
-                            new_article = RawArticle(
-                                title=article.title,
-                                content=content,
-                                url=article.url + "#content",  # Make URL unique
-                                date=article.date,
-                                topics=article.topics,
-                                source=article.source,
-                                type=article.type,
-                                created_at=datetime.now()
-                            )
-                            
-                            new_articles.append(new_article)
-                            await asyncio.sleep(0.1)  # Smaller delay between articles
+                        logger.info(f"Processing article: {article.title}")
+                        
+                        # Use the next available page
+                        page = pages[current_page]
+                        current_page = (current_page + 1) % len(pages)
+                        
+                        # Get content and update existing article
+                        content = await self.extract_article_content(page, article.url)
+                        if content and content != "Content not available" and content != "Error extracting content":
+                            article.content = content
+                            updated_count += 1
+                        
+                        await asyncio.sleep(0.1)  # Small delay between articles
                             
                     except Exception as e:
                         logger.error(f"Error processing article {article.title}: {str(e)}")
                         continue
                 
-                # Bulk save all new articles
-                if new_articles:
-                    try:
-                        self.db_session.bulk_save_objects(new_articles)
-                        self.db_session.commit()
-                        logger.info(f"Saved {len(new_articles)} articles with content")
-                    except Exception as e:
-                        self.db_session.rollback()
-                        logger.error(f"Error saving articles: {str(e)}")
+                # Commit all updates
+                try:
+                    self.db_session.commit()
+                    logger.info(f"Updated content for {updated_count} articles")
+                except Exception as e:
+                    self.db_session.rollback()
+                    logger.error(f"Error saving updates: {str(e)}")
                 
             finally:
                 # Clean up all pages
@@ -199,9 +144,9 @@ class ContentScraper:
                     await page.close()
                 await context.close()
                 await browser.close()
-
+    
     async def scrape_content(self):
-        """Scrape content from all nuclear-related articles."""
+        """Scrape content from all articles."""
         try:
             # Get all articles without content
             articles = self.db_session.query(RawArticle).filter(
@@ -213,7 +158,10 @@ class ContentScraper:
             # Process articles in chunks
             for i in range(0, len(articles), self.chunk_size):
                 chunk = articles[i:i + self.chunk_size]
-                logger.info(f"Processing chunk {i//self.chunk_size + 1}/{(len(articles) + self.chunk_size - 1)//self.chunk_size}")
+                chunk_num = i // self.chunk_size + 1
+                total_chunks = (len(articles) + self.chunk_size - 1) // self.chunk_size
+                
+                logger.info(f"Processing chunk {chunk_num}/{total_chunks}")
                 await self.process_articles_chunk(chunk)
                 await asyncio.sleep(1)  # Delay between chunks
             
