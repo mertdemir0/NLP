@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 def main():
     """Run the content scraper."""
     try:
-        # Initialize content scraper
-        scraper = ContentScraper(chunk_size=10)
+        # Initialize content scraper with larger chunk size
+        scraper = ContentScraper(chunk_size=100)
         
         # Start scraping content
         logger.info("Starting content scraping for nuclear-related articles...")
