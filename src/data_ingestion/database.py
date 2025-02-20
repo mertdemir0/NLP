@@ -19,7 +19,18 @@ class RawArticle(Base):
     source = Column(String(50))
     type = Column(String(50))  # Store article type (News Story, Press Release, etc.)
     created_at = Column(DateTime)
+
+class BloombergArticle(Base):
+    """Model for Bloomberg articles from Google search."""
+    __tablename__ = 'bloomberg_articles'
     
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    url = Column(String, unique=True)
+    summary = Column(Text)
+    date = Column(String)
+    created_at = Column(DateTime)
+
 def init_db(database_name='IAEA'):
     """Initialize the database connection."""
     # Get the project root directory
