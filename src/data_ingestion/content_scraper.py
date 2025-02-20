@@ -56,7 +56,7 @@ NUCLEAR_KEYWORDS = {
 class ContentScraper:
     """Scraper for extracting content from nuclear-related articles."""
     
-    def __init__(self, chunk_size: int = 10):
+    def __init__(self, chunk_size: int = 100):
         """Initialize the content scraper."""
         self.db_session = init_db()
         self.chunk_size = chunk_size
@@ -125,22 +125,44 @@ class ContentScraper:
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(
                 headless=True,
-                args=['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage']
+                args=[
+                    '--disable-gpu',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-setuid-sandbox',
+                    '--disable-web-security',
+                ]
             )
             
             try:
-                # Create context
+                # Create context with more performance optimizations
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    java_script_enabled=True
+                    java_script_enabled=True,
+                    bypass_csp=True,
+                    ignore_https_errors=True
                 )
-                page = await context.new_page()
                 
-                # Process each article
+                # Create a pool of pages
+                page_count = min(10, len(articles))  # Use up to 10 pages concurrently
+                pages = []
+                for _ in range(page_count):
+                    page = await context.new_page()
+                    pages.append(page)
+                
+                # Process articles using the page pool
+                current_page = 0
+                new_articles = []
+                
                 for article in articles:
                     try:
                         if self.is_nuclear_related(article.title):
                             logger.info(f"Processing nuclear-related article: {article.title}")
+                            
+                            # Use the next available page
+                            page = pages[current_page]
+                            current_page = (current_page + 1) % len(pages)
+                            
                             content = await self.extract_article_content(page, article.url)
                             
                             # Create a new article with the same data but different content
@@ -155,24 +177,30 @@ class ContentScraper:
                                 created_at=datetime.now()
                             )
                             
-                            self.db_session.add(new_article)
-                            await asyncio.sleep(1)  # Small delay between articles
+                            new_articles.append(new_article)
+                            await asyncio.sleep(0.1)  # Smaller delay between articles
                             
                     except Exception as e:
                         logger.error(f"Error processing article {article.title}: {str(e)}")
                         continue
                 
-                # Commit changes
-                try:
-                    self.db_session.commit()
-                except Exception as e:
-                    self.db_session.rollback()
-                    logger.error(f"Error saving articles: {str(e)}")
+                # Bulk save all new articles
+                if new_articles:
+                    try:
+                        self.db_session.bulk_save_objects(new_articles)
+                        self.db_session.commit()
+                        logger.info(f"Saved {len(new_articles)} articles with content")
+                    except Exception as e:
+                        self.db_session.rollback()
+                        logger.error(f"Error saving articles: {str(e)}")
                 
             finally:
+                # Clean up all pages
+                for page in pages:
+                    await page.close()
                 await context.close()
                 await browser.close()
-    
+
     async def scrape_content(self):
         """Scrape content from all nuclear-related articles."""
         try:
