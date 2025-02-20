@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Set
 from playwright.async_api import async_playwright, TimeoutError
 from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
 from .database import init_db, RawArticle
 
 # Configure logging
@@ -52,7 +53,7 @@ NUCLEAR_KEYWORDS = {
 }
 
 class ContentScraper:
-    """Scraper for extracting content from IAEA articles."""
+    """Scraper for extracting content from nuclear-related articles."""
     
     def __init__(self, chunk_size: int = 100):
         """Initialize the content scraper."""
