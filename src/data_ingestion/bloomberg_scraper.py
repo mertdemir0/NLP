@@ -6,6 +6,7 @@ from typing import List, Dict
 from playwright.async_api import async_playwright, TimeoutError
 from bs4 import BeautifulSoup
 from .database import init_db, BloombergArticle
+import random
 
 # Configure logging
 logging.basicConfig(
@@ -43,33 +44,88 @@ class BloombergScraper:
         articles = []
         
         try:
-            # Construct search URL
+            # Construct search URL with additional parameters
             search_url = (
                 f"{self.base_url}?q=site:bloomberg.com+nuclear"
-                f"&start={start_index}&num=100"
+                f"&start={start_index}&num=100&hl=en"
+                f"&filter=0"  # Show all results, including omitted ones
             )
             
-            # Go to search page
-            await page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+            # Configure additional headers
+            await page.set_extra_http_headers({
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
+            })
             
-            # Wait for search results
-            await page.wait_for_selector('div.g', timeout=10000)
+            # Go to search page with longer timeout
+            await page.goto(search_url, wait_until='networkidle', timeout=30000)
+            
+            # Add random delay between 2-5 seconds
+            await asyncio.sleep(random.uniform(2, 5))
+            
+            # Wait for results with longer timeout and multiple selectors
+            result_selectors = ['div.g', 'div[data-header-feature="0"]', 'div.rc']
+            result_elem = None
+            
+            for selector in result_selectors:
+                try:
+                    result_elem = await page.wait_for_selector(selector, timeout=20000)
+                    if result_elem:
+                        break
+                except:
+                    continue
+            
+            if not result_elem:
+                logger.error("No search results found")
+                return []
             
             # Get page content
             content = await page.content()
             soup = BeautifulSoup(content, 'html.parser')
             
-            # Find all search results
-            for result in soup.select('div.g'):
+            # Try different result container selectors
+            results = []
+            for selector in ['div.g', 'div[data-header-feature="0"]', 'div.rc']:
+                results.extend(soup.select(selector))
+            
+            if not results:
+                logger.warning("No results found with any selector")
+                return []
+            
+            # Process results
+            for result in results:
                 try:
-                    # Get title and URL
-                    title_elem = result.select_one('h3')
-                    link_elem = result.select_one('a')
+                    # Get title and URL with multiple possible selectors
+                    title_elem = (
+                        result.select_one('h3.r') or 
+                        result.select_one('h3') or 
+                        result.select_one('div.ellip')
+                    )
+                    
+                    link_elem = (
+                        result.select_one('a[data-ved]') or 
+                        result.select_one('a[ping]') or 
+                        result.select_one('a')
+                    )
+                    
                     if not title_elem or not link_elem:
                         continue
                         
                     title = title_elem.get_text(strip=True)
                     url = link_elem.get('href', '')
+                    
+                    # Clean and verify URL
+                    if 'url?q=' in url:
+                        url = url.split('url?q=')[1].split('&')[0]
                     
                     # Verify it's a Bloomberg URL
                     if not url.startswith('https://www.bloomberg.com'):
@@ -81,12 +137,20 @@ class BloombergScraper:
                     
                     self.seen_urls.add(url)
                     
-                    # Get summary
-                    summary_elem = result.select_one('div.VwiC3b')
+                    # Get summary with multiple possible selectors
+                    summary_elem = (
+                        result.select_one('div.VwiC3b') or 
+                        result.select_one('div.s') or 
+                        result.select_one('div[style*="line-height"]')
+                    )
                     summary = summary_elem.get_text(strip=True) if summary_elem else ""
                     
-                    # Get date (if available)
-                    date_elem = result.select_one('span.MUxGbd.wuQ4Ob.WZ8Tjf')
+                    # Get date with multiple possible selectors
+                    date_elem = (
+                        result.select_one('span.MUxGbd.wuQ4Ob.WZ8Tjf') or 
+                        result.select_one('span.f') or 
+                        result.select_one('div.dhIWPd')
+                    )
                     date = date_elem.get_text(strip=True) if date_elem else ""
                     
                     article_data = {
