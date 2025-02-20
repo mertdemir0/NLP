@@ -65,6 +65,11 @@ class ContentScraper:
         if hasattr(self, 'db_session'):
             self.db_session.close()
     
+    def is_nuclear_related(self, title: str) -> bool:
+        """Check if an article is nuclear-related based on its title."""
+        title_lower = title.lower()
+        return any(keyword in title_lower for keyword in NUCLEAR_KEYWORDS)
+    
     async def extract_article_content(self, page, url: str) -> str:
         """Extract content from an article page."""
         try:
