@@ -1,4 +1,4 @@
-"""Content scraper for IAEA articles."""
+"""Content scraper for nuclear-related IAEA articles."""
 import logging
 import asyncio
 from datetime import datetime
