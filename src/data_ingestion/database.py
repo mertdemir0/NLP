@@ -22,14 +22,15 @@ class RawArticle(Base):
 
 class BloombergArticle(Base):
     """Model for Bloomberg articles from Google search."""
-    __tablename__ = 'bloomberg_articles'
+    __tablename__ = 'Bloomberg'
     
     id = Column(Integer, primary_key=True)
     title = Column(String)
-    content = Column(Text)
+    content = Column(Text, default="")  # Empty content for future full text scraping
     url = Column(String, unique=True)
     summary = Column(Text)
     date = Column(String)
+    source = Column(String, default="Bloomberg")  # Source is always Bloomberg
     created_at = Column(DateTime)
 
 def init_db(database_name='IAEA'):
