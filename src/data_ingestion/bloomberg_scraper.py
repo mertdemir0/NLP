@@ -208,20 +208,49 @@ class BloombergScraper:
     async def scrape_all_results(self, max_pages: int = None):
         """Scrape Google search results for Bloomberg nuclear articles."""
         async with async_playwright() as playwright:
+            # Launch browser with additional arguments
             browser = await playwright.chromium.launch(
                 headless=True,
-                args=['--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage']
+                args=[
+                    '--disable-gpu',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-setuid-sandbox',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-site-isolation-trials',
+                    '--disable-blink-features=AutomationControlled',  # Hide automation
+                    '--disable-infobars',
+                    '--window-size=1920,1080',
+                ]
             )
             
             try:
                 # Load existing URLs
                 self.seen_urls = self.get_existing_urls()
                 
-                # Create context
+                # Create context with more realistic browser profile
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                    locale='en-US',
+                    timezone_id='Europe/London',
+                    color_scheme='light',
+                    java_script_enabled=True,
+                    bypass_csp=True,
+                    ignore_https_errors=True
                 )
+                
+                # Configure geolocation to avoid suspicion
+                await context.set_geolocation({"latitude": 51.5074, "longitude": -0.1278})
+                await context.grant_permissions(['geolocation'])
+                
+                # Enable JavaScript and cookies
+                await context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                """)
                 
                 page = await context.new_page()
                 
