@@ -26,6 +26,7 @@ class BloombergArticle(Base):
     
     id = Column(Integer, primary_key=True)
     title = Column(String)
+    content = Column(Text)
     url = Column(String, unique=True)
     summary = Column(Text)
     date = Column(String)
