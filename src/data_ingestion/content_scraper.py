@@ -24,8 +24,7 @@ NUCLEAR_KEYWORDS = {
     'small modular reactor', 'smr', 'pressurized water reactor', 'pwr',
     'boiling water reactor', 'bwr', 'nuclear fuel', 'nuclear fuel cycle',
     'nuclear power plant', 'nuclear power station', 'nuclear power system',
-    
-    # Nuclear Safety and Incidents
+    ''    # Nuclear Safety and Incidents
     'chernobyl', 'fukushima', 'three mile island', 'nuclear accident',
     'nuclear safety', 'nuclear security', 'radiation leak', 'meltdown',
     'nuclear contamination', 'nuclear disaster', 'radiation exposure',
