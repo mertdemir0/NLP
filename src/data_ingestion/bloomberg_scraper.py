@@ -120,9 +120,11 @@ class BloombergScraper:
                 try:
                     db_article = BloombergArticle(
                         title=article['title'],
+                        content="",  # Empty content for future scraping
                         url=article['url'],
                         summary=article['summary'],
                         date=article['date'],
+                        source="Bloomberg",  # Fixed source
                         created_at=datetime.now()
                     )
                     new_articles.append(db_article)
