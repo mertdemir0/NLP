@@ -14,6 +14,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Nuclear-related keywords
+NUCLEAR_KEYWORDS = {
+    # Nuclear Power and Technology
+    'nuclear','nuclear power', 'nuclear energy', 'nuclear reactor', 'nuclear plant',
+    'nuclear technology', 'nuclear fusion', 'nuclear fission', 'nuclear waste',
+    'uranium', 'plutonium', 'thorium', 'enrichment', 'spent fuel',
+    'small modular reactor', 'smr', 'pressurized water reactor', 'pwr',
+    'boiling water reactor', 'bwr', 'nuclear fuel', 'nuclear fuel cycle',
+    'nuclear power plant', 'nuclear power station', 'nuclear power system',
+    'Nuclear Energy','Nuclear','Fukushima'    # Nuclear Safety and Incidents
+    'chernobyl', 'fukushima', 'three mile island', 'nuclear accident',
+    'nuclear safety', 'nuclear security', 'radiation leak', 'meltdown',
+    'nuclear contamination', 'nuclear disaster', 'radiation exposure',
+    'nuclear emergency', 'nuclear incident', 'radiation protection',
+    
+    # Nuclear Research and Applications
+    'nuclear medicine', 'radioisotope', 'nuclear research', 'nuclear science',
+    'nuclear physics', 'particle accelerator', 'nuclear diagnostic',
+    'nuclear imaging', 'radiotherapy', 'nuclear treatment',
+    
+    # Nuclear Policy and Safeguards
+    'nuclear proliferation', 'nuclear safeguard', 'nuclear treaty',
+    'nuclear weapon', 'nuclear deterrence', 'nuclear disarmament',
+    'nuclear test', 'nuclear ban', 'nuclear inspection', 'nuclear agreement',
+    'nuclear deal', 'nuclear protocol', 'nuclear verification',
+    
+    # Nuclear Facilities and Infrastructure
+    'nuclear facility', 'nuclear site', 'nuclear storage', 'nuclear repository',
+    'nuclear laboratory', 'nuclear complex', 'nuclear installation',
+    'nuclear infrastructure', 'nuclear station',
+    
+    # Nuclear Materials and Elements
+    'radioactive', 'isotope', 'nuclear material', 'fissile material',
+    'heavy water', 'deuterium', 'tritium', 'nuclear fuel cycle',
+    'nuclear grade', 'nuclear waste', 'radium'
+}
+
 class ContentScraper:
     """Scraper for extracting content from IAEA articles."""
     
