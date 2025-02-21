@@ -17,18 +17,6 @@ class ArticleDB:
         Args:
             db_path: Path to SQLite database file
         """
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        
-        # If database exists, rename it as backup before creating new schema
-        if os.path.exists(db_path):
-            backup_path = f"{db_path}.backup"
-            try:
-                os.rename(db_path, backup_path)
-                logger.info(f"Created database backup: {backup_path}")
-            except Exception as e:
-                logger.error(f"Failed to create database backup: {str(e)}")
-        
         self.db_path = db_path
         self._create_tables()
     
@@ -38,8 +26,9 @@ class ArticleDB:
     
     def _create_tables(self):
         """Create necessary database tables if they don't exist."""
-        create_table_sql = """
-        CREATE TABLE IF NOT EXISTS articles (
+        create_tables_sql = """
+        -- Bloomberg articles table
+        CREATE TABLE IF NOT EXISTS bloomberg_articles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
@@ -48,30 +37,57 @@ class ArticleDB:
             source TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
-        CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source);
-        CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(published_date);
+        CREATE INDEX IF NOT EXISTS idx_bloomberg_url ON bloomberg_articles(url);
+        CREATE INDEX IF NOT EXISTS idx_bloomberg_source ON bloomberg_articles(source);
+        CREATE INDEX IF NOT EXISTS idx_bloomberg_date ON bloomberg_articles(published_date);
+        
+        -- IAEA articles table
+        CREATE TABLE IF NOT EXISTS iaea_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            published_date TEXT,
+            url TEXT UNIQUE NOT NULL,
+            source TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_iaea_url ON iaea_articles(url);
+        CREATE INDEX IF NOT EXISTS idx_iaea_source ON iaea_articles(source);
+        CREATE INDEX IF NOT EXISTS idx_iaea_date ON iaea_articles(published_date);
         """
         
         try:
             with self._get_connection() as conn:
-                conn.executescript(create_table_sql)
+                conn.executescript(create_tables_sql)
                 conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Error creating database tables: {str(e)}")
             raise
     
-    def insert_article(self, article: Dict) -> bool:
-        """Insert a new article into the database.
-        
-        Args:
-            article: Article data dictionary
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        insert_sql = """
-        INSERT OR IGNORE INTO articles (title, content, published_date, url, source)
+    def _row_to_dict(self, row: tuple) -> Dict:
+        """Convert database row to dictionary."""
+        return {
+            'id': row[0],
+            'title': row[1],
+            'content': row[2],
+            'date': row[3],  # Map 'published_date' to 'date'
+            'url': row[4],
+            'source': row[5],
+            'created_at': row[6]
+        }
+    
+    def insert_bloomberg_article(self, article: Dict) -> bool:
+        """Insert a new Bloomberg article."""
+        return self._insert_article(article, 'bloomberg_articles')
+    
+    def insert_iaea_article(self, article: Dict) -> bool:
+        """Insert a new IAEA article."""
+        return self._insert_article(article, 'iaea_articles')
+    
+    def _insert_article(self, article: Dict, table: str) -> bool:
+        """Insert an article into specified table."""
+        insert_sql = f"""
+        INSERT OR IGNORE INTO {table} (title, content, published_date, url, source)
         VALUES (?, ?, ?, ?, ?)
         """
         
@@ -81,58 +97,27 @@ class ArticleDB:
                 cursor.execute(insert_sql, (
                     article['title'],
                     article['content'],
-                    article['date'],  # Map 'date' to 'published_date'
+                    article['date'],
                     article['url'],
                     article['source']
                 ))
                 conn.commit()
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
-            logger.error(f"Error inserting article: {str(e)}")
+            logger.error(f"Error inserting article into {table}: {str(e)}")
             return False
     
-    def get_article_by_url(self, url: str) -> Optional[Dict]:
-        """Get article by URL.
-        
-        Args:
-            url: Article URL
-            
-        Returns:
-            Dict or None: Article data if found
-        """
-        select_sql = "SELECT * FROM articles WHERE url = ?"
-        
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(select_sql, (url,))
-                row = cursor.fetchone()
-                
-                if row:
-                    return {
-                        'id': row[0],
-                        'title': row[1],
-                        'content': row[2],
-                        'date': row[3],  # Map 'published_date' to 'date'
-                        'url': row[4],
-                        'source': row[5],
-                        'created_at': row[6]
-                    }
-                return None
-        except sqlite3.Error as e:
-            logger.error(f"Error getting article: {str(e)}")
-            return None
+    def get_bloomberg_articles(self, limit: Optional[int] = None) -> List[Dict]:
+        """Get Bloomberg articles."""
+        return self._get_articles('bloomberg_articles', limit)
     
-    def get_all_articles(self, limit: Optional[int] = None) -> List[Dict]:
-        """Get all articles from the database.
-        
-        Args:
-            limit: Optional limit on number of articles to return
-            
-        Returns:
-            List[Dict]: List of article dictionaries
-        """
-        select_sql = "SELECT * FROM articles ORDER BY published_date DESC"
+    def get_iaea_articles(self, limit: Optional[int] = None) -> List[Dict]:
+        """Get IAEA articles."""
+        return self._get_articles('iaea_articles', limit)
+    
+    def _get_articles(self, table: str, limit: Optional[int] = None) -> List[Dict]:
+        """Get articles from specified table."""
+        select_sql = f"SELECT * FROM {table} ORDER BY published_date DESC"
         if limit:
             select_sql += f" LIMIT {limit}"
         
@@ -141,76 +126,89 @@ class ArticleDB:
                 cursor = conn.cursor()
                 cursor.execute(select_sql)
                 rows = cursor.fetchall()
-                
-                return [{
-                    'id': row[0],
-                    'title': row[1],
-                    'content': row[2],
-                    'date': row[3],  # Map 'published_date' to 'date'
-                    'url': row[4],
-                    'source': row[5],
-                    'created_at': row[6]
-                } for row in rows]
+                return [self._row_to_dict(row) for row in rows]
         except sqlite3.Error as e:
-            logger.error(f"Error getting articles: {str(e)}")
+            logger.error(f"Error getting articles from {table}: {str(e)}")
             return []
     
-    def get_articles_by_source(self, source: str) -> List[Dict]:
-        """Get articles from a specific source.
+    def get_article_by_url(self, url: str) -> Optional[Dict]:
+        """Get article by URL from either table."""
+        # Try Bloomberg first
+        article = self._get_article_by_url(url, 'bloomberg_articles')
+        if article:
+            return article
         
-        Args:
-            source: Source name (e.g., 'IAEA', 'Bloomberg')
-            
-        Returns:
-            List[Dict]: List of article dictionaries
-        """
-        select_sql = "SELECT * FROM articles WHERE source = ? ORDER BY published_date DESC"
+        # Try IAEA if not found in Bloomberg
+        return self._get_article_by_url(url, 'iaea_articles')
+    
+    def _get_article_by_url(self, url: str, table: str) -> Optional[Dict]:
+        """Get article by URL from specified table."""
+        select_sql = f"SELECT * FROM {table} WHERE url = ?"
         
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(select_sql, (source,))
-                rows = cursor.fetchall()
+                cursor.execute(select_sql, (url,))
+                row = cursor.fetchone()
+                return self._row_to_dict(row) if row else None
+        except sqlite3.Error as e:
+            logger.error(f"Error getting article from {table}: {str(e)}")
+            return None
+    
+    def get_article_count(self) -> Dict[str, int]:
+        """Get article count for each source."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                counts = {}
                 
-                return [{
-                    'id': row[0],
-                    'title': row[1],
-                    'content': row[2],
-                    'date': row[3],  # Map 'published_date' to 'date'
-                    'url': row[4],
-                    'source': row[5],
-                    'created_at': row[6]
-                } for row in rows]
+                # Get Bloomberg count
+                cursor.execute("SELECT COUNT(*) FROM bloomberg_articles")
+                counts['Bloomberg'] = cursor.fetchone()[0]
+                
+                # Get IAEA count
+                cursor.execute("SELECT COUNT(*) FROM iaea_articles")
+                counts['IAEA'] = cursor.fetchone()[0]
+                
+                # Add total
+                counts['Total'] = counts['Bloomberg'] + counts['IAEA']
+                
+                return counts
         except sqlite3.Error as e:
-            logger.error(f"Error getting articles by source: {str(e)}")
-            return []
+            logger.error(f"Error getting article counts: {str(e)}")
+            return {'Bloomberg': 0, 'IAEA': 0, 'Total': 0}
     
-    def get_article_count(self) -> int:
-        """Get total number of articles in database.
-        
-        Returns:
-            int: Number of articles
-        """
+    def get_source_statistics(self) -> Dict[str, Dict[str, int]]:
+        """Get detailed statistics for each source."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM articles")
-                return cursor.fetchone()[0]
-        except sqlite3.Error as e:
-            logger.error(f"Error getting article count: {str(e)}")
-            return 0
-    
-    def get_source_statistics(self) -> Dict[str, int]:
-        """Get article count by source.
-        
-        Returns:
-            Dict[str, int]: Dictionary mapping source names to article counts
-        """
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT source, COUNT(*) FROM articles GROUP BY source")
-                return dict(cursor.fetchall())
+                stats = {}
+                
+                for table in ['bloomberg_articles', 'iaea_articles']:
+                    source = 'Bloomberg' if table == 'bloomberg_articles' else 'IAEA'
+                    
+                    # Get total articles
+                    cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                    total = cursor.fetchone()[0]
+                    
+                    # Get articles per month
+                    cursor.execute(f"""
+                        SELECT strftime('%Y-%m', published_date) as month,
+                               COUNT(*) as count
+                        FROM {table}
+                        GROUP BY month
+                        ORDER BY month DESC
+                        LIMIT 12
+                    """)
+                    monthly = dict(cursor.fetchall())
+                    
+                    stats[source] = {
+                        'total': total,
+                        'monthly': monthly
+                    }
+                
+                return stats
         except sqlite3.Error as e:
             logger.error(f"Error getting source statistics: {str(e)}")
             return {}
