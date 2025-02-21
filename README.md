@@ -2,6 +2,9 @@
 
 A sophisticated natural language processing system for analyzing nuclear energy-related content using advanced deep learning techniques and continuous learning.
 
+## Overview
+A comprehensive Natural Language Processing (NLP) pipeline for analyzing nuclear energy news articles from Bloomberg and IAEA sources. The project includes data collection, preprocessing, analysis, and visualization components.
+
 ## 🚀 Features
 
 ### Advanced Sentiment Analysis
@@ -311,3 +314,10 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - ElasticSearch for efficient storage
 - Redis for caching
 - Prometheus/Grafana for monitoring
+
+## Future Enhancements
+1. Real-time analysis capabilities
+2. Advanced ML model integration
+3. Interactive web dashboard
+4. Multi-language support
+5. API integration
