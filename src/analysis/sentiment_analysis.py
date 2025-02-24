@@ -4,7 +4,7 @@ Sentiment analysis for nuclear energy content.
 from typing import List, Dict, Any
 import pandas as pd
 from transformers import pipeline
-from .base_analyzer import BaseAnalyzer
+from src.analysis.base_analyzer import BaseAnalyzer
 
 class SentimentAnalyzer(BaseAnalyzer):
     """Analyzer for sentiment analysis of nuclear energy content."""

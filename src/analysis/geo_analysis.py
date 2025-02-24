@@ -10,7 +10,7 @@ import folium
 from pathlib import Path
 import json
 import logging
-from .base_analyzer import BaseAnalyzer
+from src.analysis.base_analyzer import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 

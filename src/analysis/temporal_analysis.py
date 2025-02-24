@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from collections import defaultdict
-from .base_analyzer import BaseAnalyzer
+from src.analysis.base_analyzer import BaseAnalyzer
 
 class TemporalAnalyzer(BaseAnalyzer):
     """Analyzes temporal patterns in nuclear energy articles."""
