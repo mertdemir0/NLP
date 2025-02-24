@@ -22,7 +22,7 @@ boot_out.txt
 *.vcf
 *.xml
 *.pdf
-
+*.DS_Store
 ### Database ###
 *.accdb
 *.db
