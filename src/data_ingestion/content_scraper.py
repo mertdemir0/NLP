@@ -31,15 +31,15 @@ NUCLEAR_KEYWORDS = {
     'nuclear emergency', 'nuclear incident', 'radiation protection',
     
     # Nuclear Research and Applications
-    'nuclear medicine', 'radioisotope', 'nuclear research', 'nuclear science',
-    'nuclear physics', 'particle accelerator', 'nuclear diagnostic',
-    'nuclear imaging', 'radiotherapy', 'nuclear treatment',
+    #'nuclear medicine', 'radioisotope', 'nuclear research', 'nuclear science',
+    #'nuclear physics', 'particle accelerator', 'nuclear diagnostic',
+    #'nuclear imaging', 'radiotherapy', 'nuclear treatment',
     
     # Nuclear Policy and Safeguards
-    'nuclear proliferation', 'nuclear safeguard', 'nuclear treaty',
-    'nuclear weapon', 'nuclear deterrence', 'nuclear disarmament',
-    'nuclear test', 'nuclear ban', 'nuclear inspection', 'nuclear agreement',
-    'nuclear deal', 'nuclear protocol', 'nuclear verification',
+    #'nuclear proliferation', 'nuclear safeguard', 'nuclear treaty',
+    #'nuclear weapon', 'nuclear deterrence', 'nuclear disarmament',
+    #'nuclear test', 'nuclear ban', 'nuclear inspection', 'nuclear agreement',
+    #'nuclear deal', 'nuclear protocol', 'nuclear verification',
     
     # Nuclear Facilities and Infrastructure
     'nuclear facility', 'nuclear site', 'nuclear storage', 'nuclear repository',

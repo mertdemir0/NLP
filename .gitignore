@@ -12,7 +12,7 @@ boot_out.txt
 *.csv
 *.dat
 *.efx
-*.gbr
+*.gbr 
 *.key
 *.pps
 *.ppt
