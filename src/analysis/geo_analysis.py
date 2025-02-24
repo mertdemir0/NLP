@@ -213,20 +213,28 @@ class GeoAnalyzer(BaseAnalyzer):
         Returns:
             Sentiment score between -1 and 1.
         """
-        # This is a simplified version - in practice, you might want to use
-        # a more sophisticated sentiment analysis approach
-        positive_words = {'success', 'growth', 'innovation', 'progress', 'efficient'}
-        negative_words = {'failure', 'risk', 'problem', 'concern', 'accident'}
+        # Define sentiment lexicons
+        positive_words = {
+            'success', 'successful', 'positive', 'advance', 'progress', 'improve',
+            'benefit', 'beneficial', 'advantage', 'cooperation', 'collaborate',
+            'partnership', 'agreement', 'support', 'innovation', 'development',
+            'sustainable', 'clean', 'efficient', 'safe', 'reliable'
+        }
         
-        score = 0
-        for token in doc:
-            if token.text.lower() in positive_words:
-                score += 1
-            elif token.text.lower() in negative_words:
-                score -= 1
+        negative_words = {
+            'failure', 'failed', 'negative', 'problem', 'issue', 'concern',
+            'risk', 'danger', 'threat', 'accident', 'incident', 'crisis',
+            'conflict', 'dispute', 'controversy', 'opposition', 'protest',
+            'waste', 'contamination', 'pollution', 'unsafe', 'unreliable'
+        }
         
-        # Normalize score to [-1, 1] range
-        if score != 0:
-            score = score / max(abs(score), 1)
-            
-        return score
+        # Count sentiment words
+        positive_count = sum(1 for token in doc if token.text.lower() in positive_words)
+        negative_count = sum(1 for token in doc if token.text.lower() in negative_words)
+        
+        # Calculate normalized sentiment score
+        total_count = positive_count + negative_count
+        if total_count == 0:
+            return 0.0
+        
+        return (positive_count - negative_count) / total_count

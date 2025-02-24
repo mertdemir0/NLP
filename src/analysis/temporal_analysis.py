@@ -135,63 +135,92 @@ class TemporalAnalyzer(BaseAnalyzer):
 
     def _calculate_trends(self, series: pd.Series) -> Dict[str, float]:
         """Calculate trend metrics for a time series."""
-        # Calculate rolling statistics
-        rolling_mean = series.rolling(window=3, min_periods=1).mean()
+        # Calculate overall trend (linear regression)
+        x = np.arange(len(series))
+        y = series.values
+        slope, intercept = np.polyfit(x, y, 1)
         
-        # Calculate growth rates
-        growth_rate = (series - series.shift(1)) / series.shift(1)
+        # Calculate growth rate
+        start_val = series.iloc[0]
+        end_val = series.iloc[-1]
+        growth_rate = ((end_val - start_val) / start_val) if start_val != 0 else 0
+        
+        # Calculate volatility
+        volatility = series.std() / series.mean() if series.mean() != 0 else 0
         
         return {
-            'mean': series.mean(),
-            'std': series.std(),
-            'trend_direction': 1 if growth_rate.mean() > 0 else -1,
-            'volatility': growth_rate.std(),
-            'last_value': series.iloc[-1],
-            'peak_value': series.max()
+            'slope': slope,
+            'growth_rate': growth_rate,
+            'volatility': volatility
         }
-
+    
     def _identify_patterns(self, series: pd.Series) -> Dict[str, List[str]]:
         """Identify temporal patterns in the series."""
-        patterns = defaultdict(list)
+        # Calculate moving averages
+        ma_short = series.rolling(window=3).mean()
+        ma_long = series.rolling(window=6).mean()
         
-        # Detect seasonality
-        if len(series) >= 12:
-            seasonal_diff = series - series.shift(12)
-            patterns['seasonal'] = bool(seasonal_diff.autocorr() > 0.7)
+        # Identify trend periods
+        trends = []
+        for i in range(len(ma_short)-1):
+            if ma_short.iloc[i] < ma_short.iloc[i+1]:
+                trends.append('upward')
+            else:
+                trends.append('downward')
         
-        # Detect trends
-        rolling_mean = series.rolling(window=3).mean()
-        if rolling_mean.iloc[-1] > rolling_mean.iloc[0]:
-            patterns['trend'].append('increasing')
+        # Identify seasonality
+        # Simple approach: compare same months across years
+        if len(series) >= 24:  # Need at least 2 years of data
+            monthly_avg = series.groupby(series.index.month).mean()
+            seasonality = monthly_avg.std() / monthly_avg.mean() > 0.1
         else:
-            patterns['trend'].append('decreasing')
+            seasonality = False
         
-        # Detect cycles
-        if len(series) >= 4:
-            autocorr = [series.autocorr(lag=i) for i in range(1, 5)]
-            if any(ac > 0.7 for ac in autocorr):
-                patterns['cyclic'] = True
-        
-        return dict(patterns)
-
+        return {
+            'trends': trends,
+            'has_seasonality': seasonality
+        }
+    
     def _find_peak_periods(self, series: pd.Series) -> List[Dict[str, str]]:
-        """Identify peak periods in the time series."""
-        # Calculate rolling mean and standard deviation
-        rolling_mean = series.rolling(window=3).mean()
-        rolling_std = series.rolling(window=3).std()
+        """Find periods with peak activity."""
+        # Calculate threshold for peaks (e.g., 1.5 standard deviations above mean)
+        threshold = series.mean() + (1.5 * series.std())
         
-        # Find peaks (periods above mean + 2*std)
-        threshold = rolling_mean + (2 * rolling_std)
-        peaks = series[series > threshold]
+        # Find peaks
+        peaks = []
+        for date, value in series.items():
+            if value > threshold:
+                peaks.append({
+                    'date': date.strftime('%Y-%m-%d'),
+                    'value': float(value)
+                })
         
-        return [
-            {
-                'date': date.strftime('%Y-%m-%d'),
-                'value': value,
-                'significance': float((value - rolling_mean[date]) / rolling_std[date])
-            }
-            for date, value in peaks.items()
-        ]
+        return peaks
+    
+    def classify_technology(self, text: str) -> str:
+        """Classify the technology mentioned in the text."""
+        # Define technology keywords
+        tech_keywords = {
+            'nuclear_fission': ['fission', 'uranium', 'plutonium', 'nuclear reactor', 'nuclear power'],
+            'nuclear_fusion': ['fusion', 'tokamak', 'iter', 'plasma', 'magnetic confinement'],
+            'smr': ['small modular reactor', 'smr', 'modular nuclear', 'small reactor'],
+            'waste_management': ['nuclear waste', 'spent fuel', 'radioactive waste', 'waste storage'],
+            'safety_systems': ['containment', 'safety system', 'cooling system', 'emergency core']
+        }
+        
+        # Count mentions of each technology
+        tech_counts = defaultdict(int)
+        text_lower = text.lower()
+        
+        for tech, keywords in tech_keywords.items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    tech_counts[tech] += 1
+        
+        # Return the most mentioned technology, or 'other' if none found
+        if tech_counts:
+            return max(tech_counts.items(), key=lambda x: x[1])[0]
+        return 'other'
 
     def _calculate_sentiment(self, text: str) -> float:
         """Calculate sentiment score for text. Override in subclass for better implementation."""
