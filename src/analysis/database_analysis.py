@@ -167,33 +167,41 @@ class DatabaseAnalyzer:
             ])
         
         # Prepare sentiment data
-        iaea_sentiment = self.sentiment_analyzer.analyze_temporal_trends(
-            iaea_df['content'].tolist(),
-            iaea_df['date'].tolist()
-        )
-        sentiment_df = iaea_sentiment.copy()
-        sentiment_df['source'] = 'IAEA'
+        iaea_sentiment = []
+        for _, row in iaea_df.iterrows():
+            sentiment = self.sentiment_analyzer.analyze_sentiment(row['content'])
+            iaea_sentiment.append({
+                'date': row['date'],
+                'sentiment': sentiment['score'],
+                'source': 'IAEA'
+            })
+        
+        sentiment_df = pd.DataFrame(iaea_sentiment)
         
         if bloomberg_df is not None:
-            bloomberg_sentiment = self.sentiment_analyzer.analyze_temporal_trends(
-                bloomberg_df['summary'].tolist(),
-                bloomberg_df['date'].tolist()
-            )
-            sentiment_df = pd.concat([
-                sentiment_df,
-                pd.DataFrame({
-                    'date': bloomberg_sentiment['date'],
-                    'sentiment': bloomberg_sentiment['sentiment'],
+            bloomberg_sentiment = []
+            for _, row in bloomberg_df.iterrows():
+                sentiment = self.sentiment_analyzer.analyze_sentiment(row['summary'])
+                bloomberg_sentiment.append({
+                    'date': row['date'],
+                    'sentiment': sentiment['score'],
                     'source': 'Bloomberg'
                 })
+            sentiment_df = pd.concat([
+                sentiment_df,
+                pd.DataFrame(bloomberg_sentiment)
             ])
+        
+        # Round dates to months for better visualization
+        sentiment_df['date'] = sentiment_df['date'].dt.to_period('M').astype(str)
         
         # Prepare technology data
         iaea_tech = pd.DataFrame([
             {'technology': tech, 'count': count, 'source': 'IAEA'}
             for tech, count in Counter(
-                self.temporal_analyzer.classify_technology(text)
+                tech
                 for text in iaea_df['content']
+                for tech in self.temporal_analyzer.classify_technology(text)
             ).items()
         ])
         
@@ -201,8 +209,9 @@ class DatabaseAnalyzer:
             bloomberg_tech = pd.DataFrame([
                 {'technology': tech, 'count': count, 'source': 'Bloomberg'}
                 for tech, count in Counter(
-                    self.temporal_analyzer.classify_technology(text)
+                    tech
                     for text in bloomberg_df['summary']
+                    for tech in self.temporal_analyzer.classify_technology(text)
                 ).items()
             ])
             tech_df = pd.concat([iaea_tech, bloomberg_tech])
@@ -216,7 +225,6 @@ class DatabaseAnalyzer:
             'value',
             'Content Volume Over Time'
         )
-        self.viz_manager.save_visualization(temporal_fig, 'temporal_analysis.html')
         
         sentiment_fig = self.viz_manager.create_sentiment_heatmap(
             sentiment_df,
@@ -225,17 +233,22 @@ class DatabaseAnalyzer:
             'sentiment',
             'Sentiment Analysis Over Time'
         )
-        self.viz_manager.save_visualization(sentiment_fig, 'sentiment_analysis.html')
         
-        tech_fig = self.viz_manager.create_technology_comparison(tech_df)
-        self.viz_manager.save_visualization(tech_fig, 'technology_distribution.html')
+        tech_fig = self.viz_manager.create_technology_comparison(
+            tech_df,
+            tech_col='technology',
+            value_col='count',
+            source_col='source'
+        )
         
         # Create interactive dashboard
         app = self.viz_manager.create_dashboard(
-            temporal_df,
-            sentiment_df,
-            tech_df
+            temporal_fig=temporal_fig,
+            sentiment_fig=sentiment_fig,
+            tech_fig=tech_fig,
+            title="Nuclear Energy Content Analysis Dashboard"
         )
+        
         return app
 
 if __name__ == "__main__":

@@ -31,47 +31,34 @@ class VisualizationManager:
                            value_col: str = 'value',
                            title: str = 'Temporal Analysis') -> go.Figure:
         """Create temporal trend visualization."""
-        fig = go.Figure()
-        
-        # Add time series line
-        fig.add_trace(go.Scatter(
-            x=data[time_col],
-            y=data[value_col],
-            mode='lines+markers',
-            name='Value'
-        ))
-        
-        # Add trend line
-        z = np.polyfit(range(len(data)), data[value_col], 1)
-        p = np.poly1d(z)
-        fig.add_trace(go.Scatter(
-            x=data[time_col],
-            y=p(range(len(data))),
-            mode='lines',
-            name='Trend',
-            line=dict(dash='dash')
-        ))
+        fig = px.line(data, 
+                     x=time_col, 
+                     y=value_col, 
+                     color='source',
+                     title=title)
         
         fig.update_layout(
-            title=title,
             xaxis_title="Date",
-            yaxis_title="Value",
-            template="plotly_white"
+            yaxis_title="Number of Articles",
+            template="plotly_white",
+            hovermode='x unified'
         )
         
         return fig
     
     def create_sentiment_heatmap(self, sentiment_data: pd.DataFrame,
-                               x_col: str,
-                               y_col: str,
-                               value_col: str,
+                               x_col: str = 'date',
+                               y_col: str = 'source',
+                               value_col: str = 'sentiment',
                                title: str = 'Sentiment Analysis') -> go.Figure:
         """Create sentiment heatmap visualization."""
+        # Aggregate sentiment scores by date and source
         pivot_table = sentiment_data.pivot_table(
             values=value_col,
             index=y_col,
             columns=x_col,
-            aggfunc='mean'
+            aggfunc='mean',
+            fill_value=0
         )
         
         fig = go.Figure(data=go.Heatmap(
@@ -79,11 +66,17 @@ class VisualizationManager:
             x=pivot_table.columns,
             y=pivot_table.index,
             colorscale='RdBu',
-            zmid=0
+            zmid=0,
+            text=np.round(pivot_table.values, 2),
+            texttemplate='%{text}',
+            textfont={"size": 10},
+            hoverongaps=False
         ))
         
         fig.update_layout(
             title=title,
+            xaxis_title="Date",
+            yaxis_title="Source",
             template="plotly_white"
         )
         
@@ -91,63 +84,59 @@ class VisualizationManager:
     
     def create_technology_comparison(self, tech_data: pd.DataFrame,
                                    tech_col: str = 'technology',
-                                   value_col: str = 'count') -> go.Figure:
+                                   value_col: str = 'count',
+                                   source_col: str = 'source',
+                                   title: str = 'Technology Distribution') -> go.Figure:
         """Create technology comparison visualization."""
-        fig = go.Figure(data=[
-            go.Bar(
-                x=tech_data[tech_col],
-                y=tech_data[value_col],
-                marker_color='lightblue'
-            )
-        ])
+        fig = px.bar(tech_data, 
+                    x=tech_col, 
+                    y=value_col,
+                    color=source_col,
+                    barmode='group',
+                    title=title)
         
         fig.update_layout(
-            title='Technology Distribution',
             xaxis_title="Technology",
             yaxis_title="Count",
-            template="plotly_white"
+            template="plotly_white",
+            showlegend=True,
+            legend_title="Source",
+            xaxis_tickangle=-45
         )
         
         return fig
     
-    def create_dashboard(self, temporal_data: pd.DataFrame,
-                        sentiment_data: pd.DataFrame,
-                        tech_data: pd.DataFrame) -> dash.Dash:
+    def create_dashboard(self,
+                        temporal_fig: go.Figure,
+                        sentiment_fig: go.Figure,
+                        tech_fig: go.Figure,
+                        title: str = "Analysis Dashboard") -> dash.Dash:
         """Create an interactive dashboard."""
         app = dash.Dash(__name__)
         
         app.layout = html.Div([
-            html.H1("Nuclear Energy Content Analysis Dashboard"),
+            html.H1(title, style={'textAlign': 'center', 'marginBottom': 30}),
             
             html.Div([
-                html.H2("Temporal Analysis"),
-                dcc.Graph(
-                    id='temporal-plot',
-                    figure=self.create_temporal_plot(temporal_data)
-                )
-            ]),
+                html.H2("Content Volume Over Time", style={'textAlign': 'center'}),
+                dcc.Graph(figure=temporal_fig)
+            ], style={'marginBottom': 40}),
             
             html.Div([
-                html.H2("Sentiment Analysis"),
-                dcc.Graph(
-                    id='sentiment-heatmap',
-                    figure=self.create_sentiment_heatmap(
-                        sentiment_data,
-                        'date',
-                        'technology',
-                        'sentiment'
-                    )
-                )
-            ]),
+                html.H2("Sentiment Analysis", style={'textAlign': 'center'}),
+                dcc.Graph(figure=sentiment_fig)
+            ], style={'marginBottom': 40}),
             
             html.Div([
-                html.H2("Technology Distribution"),
-                dcc.Graph(
-                    id='tech-comparison',
-                    figure=self.create_technology_comparison(tech_data)
-                )
+                html.H2("Technology Distribution", style={'textAlign': 'center'}),
+                dcc.Graph(figure=tech_fig)
             ])
-        ])
+        ], style={
+            'padding': '20px',
+            'maxWidth': '1200px',
+            'margin': 'auto',
+            'fontFamily': 'Arial, sans-serif'
+        })
         
         return app
     
