@@ -39,3 +39,12 @@ jobs:
           OCO_MODEL: gpt-4o-mini
           OCO_LANGUAGE: en
           OCO_PROMPT_MODULE: conventional-commit
+      # Rebase main onto origin/main
+      - name: Rebase main onto origin/main
+        run: |
+          git fetch origin
+          git checkout main
+          git rebase origin/main
+          git push origin main --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
