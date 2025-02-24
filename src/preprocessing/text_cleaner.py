@@ -9,20 +9,32 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 import nltk
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Download required NLTK data
 try:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
-    nltk.download('averaged_perceptron_tagger')
-except:
-    logging.warning("Failed to download NLTK data. Make sure to run this manually.")
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    nltk.download('wordnet', quiet=True)
+    nltk.download('averaged_perceptron_tagger', quiet=True)
+    logger.info("Successfully downloaded NLTK data")
+except Exception as e:
+    logger.warning(f"Failed to download NLTK data: {str(e)}. Some functionality may be limited.")
 
 # Load spaCy model
 try:
-    nlp = spacy.load('en_core_web_sm')
-except:
-    logging.warning("Failed to load spaCy model. Please install it using: python -m spacy download en_core_web_sm")
+    nlp = spacy.load('en_core_web_lg')
+    logger.info("Successfully loaded spaCy model 'en_core_web_lg'")
+except OSError:
+    logger.warning("Could not load 'en_core_web_lg'. Attempting to load 'en_core_web_sm' as fallback...")
+    try:
+        nlp = spacy.load('en_core_web_sm')
+        logger.info("Successfully loaded fallback spaCy model 'en_core_web_sm'")
+    except OSError as e:
+        logger.error(f"Failed to load spaCy models: {str(e)}. Named entity recognition will be disabled.")
+        nlp = None
 
 class TextCleaner:
     """Class for cleaning and preprocessing text data."""
@@ -127,6 +139,10 @@ class TextCleaner:
         Returns:
             List of (entity_text, entity_label) tuples
         """
+        if nlp is None:
+            logger.error("Named entity recognition is disabled due to spaCy model loading failure.")
+            return []
+        
         doc = nlp(text)
         return [(ent.text, ent.label_) for ent in doc.ents]
     

@@ -5,7 +5,7 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-
+from pathlib import Path
 import pandas as pd
 import yaml
 from transformers import pipeline
@@ -16,12 +16,16 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Create logs directory if it doesn't exist
+log_dir = Path(os.getenv('LOG_DIR', 'logs'))
+log_dir.mkdir(parents=True, exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=os.getenv('LOG_LEVEL', 'INFO'),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.getenv('LOG_FILE', 'logs/app.log')),
+        logging.FileHandler(log_dir / 'app.log'),
         logging.StreamHandler()
     ]
 )

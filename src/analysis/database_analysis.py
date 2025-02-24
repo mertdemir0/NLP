@@ -6,6 +6,8 @@ from src.analysis.geo_analysis import GeoAnalyzer
 from src.analysis.temporal_analysis import TemporalAnalyzer
 from src.analysis.visualization import VisualizationManager
 from collections import Counter
+import re
+from datetime import datetime, timedelta
 
 class DatabaseAnalyzer:
     def __init__(self, db_path):
@@ -14,7 +16,38 @@ class DatabaseAnalyzer:
         self.geo_analyzer = GeoAnalyzer()
         self.temporal_analyzer = TemporalAnalyzer()
         self.viz_manager = VisualizationManager()
+    
+    def parse_relative_date(self, date_str: str) -> datetime:
+        """Parse relative date strings like '6 days ago' into datetime objects."""
+        if not isinstance(date_str, str):
+            return date_str
+            
+        now = datetime.now()
         
+        # Handle 'days ago'
+        match = re.match(r'(\d+)\s*days?\s*ago', date_str)
+        if match:
+            days = int(match.group(1))
+            return now - timedelta(days=days)
+            
+        # Handle 'hours ago'
+        match = re.match(r'(\d+)\s*hours?\s*ago', date_str)
+        if match:
+            hours = int(match.group(1))
+            return now - timedelta(hours=hours)
+            
+        # Handle 'minutes ago'
+        match = re.match(r'(\d+)\s*minutes?\s*ago', date_str)
+        if match:
+            minutes = int(match.group(1))
+            return now - timedelta(minutes=minutes)
+            
+        # If no pattern matches, try pandas to_datetime
+        try:
+            return pd.to_datetime(date_str)
+        except:
+            return None
+    
     def read_iaea_data(self):
         """
         Read IAEA table data from the database
@@ -27,6 +60,8 @@ class DatabaseAnalyzer:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 df = pd.read_sql_query(query, conn)
+                # Convert dates
+                df['date'] = pd.to_datetime(df['date'])
                 return df
         except Exception as e:
             print(f"Error reading IAEA data: {e}")
@@ -44,6 +79,10 @@ class DatabaseAnalyzer:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 df = pd.read_sql_query(query, conn)
+                # Parse relative dates
+                df['date'] = df['date'].apply(self.parse_relative_date)
+                # Drop rows with invalid dates
+                df = df.dropna(subset=['date'])
                 return df
         except Exception as e:
             print(f"Error reading Bloomberg data: {e}")

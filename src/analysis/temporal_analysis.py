@@ -24,13 +24,15 @@ class TemporalAnalyzer(BaseAnalyzer):
         }
 
     def analyze_content_volume(self, articles: List[Dict], 
-                             time_window: str = 'monthly') -> Dict[str, Dict]:
+                             time_window: str = 'monthly',
+                             text_field: str = None) -> Dict[str, Dict]:
         """
         Analyze content volume over time.
 
         Args:
-            articles: List of article dictionaries with 'date' and 'text' fields
+            articles: List of article dictionaries with 'date' and text content field
             time_window: Time window for aggregation ('daily', 'weekly', 'monthly', 'quarterly', 'yearly')
+            text_field: Name of the field containing the text content. If None, will try 'content', 'text', or 'summary'
 
         Returns:
             Dictionary containing temporal analysis results
@@ -38,9 +40,20 @@ class TemporalAnalyzer(BaseAnalyzer):
         if time_window not in self.time_windows:
             raise ValueError(f"Invalid time window. Must be one of {list(self.time_windows.keys())}")
 
+        # Determine which field contains the text content
+        if text_field is None:
+            if 'content' in articles[0]:
+                text_field = 'content'
+            elif 'text' in articles[0]:
+                text_field = 'text'
+            elif 'summary' in articles[0]:
+                text_field = 'summary'
+            else:
+                raise ValueError("Could not find text content field in articles. Expected 'content', 'text', or 'summary'")
+
         # Convert dates and create DataFrame
         df = pd.DataFrame([
-            {'date': pd.to_datetime(article['date']), 'text': article['text']}
+            {'date': pd.to_datetime(article['date']), 'text': article[text_field]}
             for article in articles
         ])
 
@@ -60,22 +73,35 @@ class TemporalAnalyzer(BaseAnalyzer):
         }
 
     def analyze_technology_evolution(self, articles: List[Dict],
-                                  time_window: str = 'monthly') -> Dict[str, Dict]:
+                                  time_window: str = 'monthly',
+                                  text_field: str = None) -> Dict[str, Dict]:
         """
         Analyze how technology mentions evolve over time.
 
         Args:
             articles: List of article dictionaries
             time_window: Time window for aggregation
+            text_field: Name of the field containing the text content. If None, will try 'content', 'text', or 'summary'
 
         Returns:
             Dictionary containing technology evolution analysis
         """
+        # Determine which field contains the text content
+        if text_field is None:
+            if 'content' in articles[0]:
+                text_field = 'content'
+            elif 'text' in articles[0]:
+                text_field = 'text'
+            elif 'summary' in articles[0]:
+                text_field = 'summary'
+            else:
+                raise ValueError("Could not find text content field in articles. Expected 'content', 'text', or 'summary'")
+
         df = pd.DataFrame([
             {
                 'date': pd.to_datetime(article['date']),
-                'text': article['text'],
-                'technology': self.classify_technology(article['text'])
+                'text': article[text_field],
+                'technology': self.classify_technology(article[text_field])
             }
             for article in articles
         ])
@@ -98,23 +124,36 @@ class TemporalAnalyzer(BaseAnalyzer):
         }
 
     def analyze_temporal_relationships(self, articles: List[Dict],
-                                    time_window: str = 'monthly') -> Dict[str, Dict]:
+                                    time_window: str = 'monthly',
+                                    text_field: str = None) -> Dict[str, Dict]:
         """
         Analyze relationships between different aspects over time.
 
         Args:
             articles: List of article dictionaries
             time_window: Time window for aggregation
+            text_field: Name of the field containing the text content. If None, will try 'content', 'text', or 'summary'
 
         Returns:
             Dictionary containing relationship analysis results
         """
+        # Determine which field contains the text content
+        if text_field is None:
+            if 'content' in articles[0]:
+                text_field = 'content'
+            elif 'text' in articles[0]:
+                text_field = 'text'
+            elif 'summary' in articles[0]:
+                text_field = 'summary'
+            else:
+                raise ValueError("Could not find text content field in articles. Expected 'content', 'text', or 'summary'")
+
         df = pd.DataFrame([
             {
                 'date': pd.to_datetime(article['date']),
-                'text': article['text'],
-                'technology': self.classify_technology(article['text']),
-                'sentiment': self._calculate_sentiment(article['text'])
+                'text': article[text_field],
+                'technology': self.classify_technology(article[text_field]),
+                'sentiment': self._calculate_sentiment(article[text_field])
             }
             for article in articles
         ])

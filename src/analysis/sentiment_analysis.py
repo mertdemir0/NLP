@@ -3,8 +3,12 @@ Sentiment analysis for nuclear energy content.
 """
 from typing import List, Dict, Any
 import pandas as pd
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 from src.analysis.base_analyzer import BaseAnalyzer
+import logging
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 class SentimentAnalyzer(BaseAnalyzer):
     """Analyzer for sentiment analysis of nuclear energy content."""
@@ -12,14 +16,73 @@ class SentimentAnalyzer(BaseAnalyzer):
     def __init__(self, config_path: str = "config/config.yaml"):
         """Initialize the sentiment analyzer."""
         super().__init__(config_path)
-        self.sentiment_pipeline = None
+        self.model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        self.sentiment_pipeline = pipeline("sentiment-analysis", model=self.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.max_length = 512  # Maximum sequence length for DistilBERT
         
-    def initialize_model(self) -> None:
-        """Initialize the sentiment analysis model."""
-        self.sentiment_pipeline = pipeline(
-            "sentiment-analysis",
-            model=self.config['analysis']['sentiment']['model']
-        )
+    def _truncate_text(self, text: str) -> str:
+        """Truncate text to fit within model's maximum sequence length."""
+        tokens = self.tokenizer.tokenize(text)
+        if len(tokens) > self.max_length - 2:  # Account for [CLS] and [SEP] tokens
+            tokens = tokens[:(self.max_length - 2)]
+            logger.debug(f"Truncated text from {len(tokens)} tokens to {self.max_length}")
+        return self.tokenizer.convert_tokens_to_string(tokens)
+    
+    def _chunk_and_analyze(self, text: str) -> float:
+        """Split long text into chunks and average their sentiment scores."""
+        # Split text into sentences (rough approximation)
+        chunks = [s.strip() for s in text.split('.') if s.strip()]
+        
+        if not chunks:
+            return 0.0
+        
+        # Initialize variables for weighted average
+        total_score = 0
+        total_length = 0
+        
+        # Process each chunk
+        for chunk in chunks:
+            truncated_chunk = self._truncate_text(chunk)
+            if not truncated_chunk:
+                continue
+                
+            try:
+                result = self.sentiment_pipeline(truncated_chunk)[0]
+                # Convert sentiment to numeric score (-1 for negative, 1 for positive)
+                score = 1 if result['label'] == 'POSITIVE' else -1
+                # Weight by chunk length
+                chunk_length = len(chunk.split())
+                total_score += score * chunk_length
+                total_length += chunk_length
+            except Exception as e:
+                logger.warning(f"Error processing chunk: {str(e)}")
+                continue
+        
+        # Return weighted average score
+        return total_score / total_length if total_length > 0 else 0.0
+    
+    def analyze_sentiment(self, text: str) -> Dict[str, Any]:
+        """
+        Analyze sentiment of a text.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            Dictionary containing sentiment analysis results
+        """
+        try:
+            sentiment_score = self._chunk_and_analyze(text)
+            
+            return {
+                'score': sentiment_score,
+                'label': 'POSITIVE' if sentiment_score > 0 else 'NEGATIVE',
+                'confidence': abs(sentiment_score)
+            }
+        except Exception as e:
+            logger.error(f"Error in sentiment analysis: {str(e)}")
+            return {'score': 0, 'label': 'NEUTRAL', 'confidence': 0}
     
     def analyze_by_technology(self, texts: List[str], technologies: List[List[str]]) -> pd.DataFrame:
         """Analyze sentiment grouped by technology.
@@ -31,16 +94,13 @@ class SentimentAnalyzer(BaseAnalyzer):
         Returns:
             DataFrame with sentiment scores by technology
         """
-        if self.sentiment_pipeline is None:
-            self.initialize_model()
-            
         results = []
         for text, techs in zip(texts, technologies):
-            sentiment = self.sentiment_pipeline(text)[0]
+            sentiment = self.analyze_sentiment(text)
             for tech in techs:
                 results.append({
                     'technology': tech,
-                    'sentiment': sentiment['score'] if sentiment['label'] == 'POSITIVE' else -sentiment['score'],
+                    'sentiment': sentiment['score'],
                     'label': sentiment['label']
                 })
         
@@ -56,15 +116,12 @@ class SentimentAnalyzer(BaseAnalyzer):
         Returns:
             DataFrame with sentiment scores over time
         """
-        if self.sentiment_pipeline is None:
-            self.initialize_model()
-            
         results = []
         for text, date in zip(texts, dates):
-            sentiment = self.sentiment_pipeline(text)[0]
+            sentiment = self.analyze_sentiment(text)
             results.append({
                 'date': pd.to_datetime(date),
-                'sentiment': sentiment['score'] if sentiment['label'] == 'POSITIVE' else -sentiment['score'],
+                'sentiment': sentiment['score'],
                 'label': sentiment['label']
             })
         
@@ -80,16 +137,13 @@ class SentimentAnalyzer(BaseAnalyzer):
         Returns:
             DataFrame with sentiment scores by location
         """
-        if self.sentiment_pipeline is None:
-            self.initialize_model()
-            
         results = []
         for text, location in zip(texts, locations):
             if location:  # Only analyze if location is present
-                sentiment = self.sentiment_pipeline(text)[0]
+                sentiment = self.analyze_sentiment(text)
                 results.append({
                     'location': location,
-                    'sentiment': sentiment['score'] if sentiment['label'] == 'POSITIVE' else -sentiment['score'],
+                    'sentiment': sentiment['score'],
                     'label': sentiment['label']
                 })
         
