@@ -17,20 +17,20 @@ jobs:
         uses: actions/setup-node@v2
         with:
           node-version: '16'
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
       - uses: di-sukharev/opencommit@github-action-v1.0.4
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
         env:
-          # set openAI api key in repo actions secrets,
-          # for openAI keys go to: https://platform.openai.com/account/api-keys
-          # for repo secret go to: <your_repo_url>/settings/secrets/actions
           OCO_OPENAI_API_KEY: ${{ secrets.OCO_API_KEY }}
-
-          # customization
           OCO_TOKENS_MAX_INPUT: 4096
           OCO_TOKENS_MAX_OUTPUT: 500
           OCO_OPENAI_BASE_PATH: ''
@@ -39,12 +39,11 @@ jobs:
           OCO_MODEL: gpt-4o-mini
           OCO_LANGUAGE: en
           OCO_PROMPT_MODULE: conventional-commit
-      # Rebase main onto origin/main
-      - name: Rebase main onto origin/main
+      - name: Fetch and rebase main
         run: |
-          git fetch origin
+          git fetch origin main:main
           git checkout main
-          git rebase origin/main
-          git push origin main --force
+          git pull origin main --rebase
+          git push origin main --force-with-lease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
