@@ -13,6 +13,9 @@ from plotly.subplots import make_subplots
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
+# TODO: integration problems/not working
+# labels: bug
+
 class ReportGenerator:
     """Generate reports from analysis results."""
     

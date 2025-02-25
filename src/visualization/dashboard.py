@@ -17,7 +17,8 @@ from pathlib import Path
 
 # Load environment variables
 load_dotenv()
-
+# TODO: integration problems
+# labels: bug
 class NuclearEnergyDashboard:
     """Dashboard for visualizing nuclear energy content analysis."""
     

@@ -13,6 +13,9 @@ import nltk
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# TODO: Better model?
+# labels: question
+
 # Download required NLTK data
 try:
     nltk.download('punkt', quiet=True)
@@ -36,6 +39,8 @@ except OSError:
         logger.error(f"Failed to load spaCy models: {str(e)}. Named entity recognition will be disabled.")
         nlp = None
 
+# TODO: ADD args options for lemmatization, stop words, etc.
+# labels: enhancement
 class TextCleaner:
     """Class for cleaning and preprocessing text data."""
     
