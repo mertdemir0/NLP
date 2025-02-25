@@ -41,9 +41,9 @@ jobs:
           OCO_PROMPT_MODULE: conventional-commit
       - name: Fetch and rebase main
         run: |
-          git fetch origin main:main
-          git checkout main
-          git pull origin main --rebase
+          git fetch origin
+          git checkout -B main origin/main
+          git pull --rebase origin main
           git push origin main --force-with-lease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
