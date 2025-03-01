@@ -72,9 +72,10 @@ class BloombergScraper:
             for result in organic_results:
                 try:
                     url = result.get('link', '')
+                    parsed_url = urlparse(url)
                     
                     # Verify it's a Bloomberg URL
-                    if not url.startswith('https://www.bloomberg.com'):
+                    if parsed_url.hostname != 'www.bloomberg.com':
                         continue
                     
                     # Skip if URL already seen
