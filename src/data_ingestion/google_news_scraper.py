@@ -307,46 +307,94 @@ class GoogleNewsScraper:
         logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
         
         articles = []
-        driver = self._setup_driver()
+        max_retries = 3
+        retry_count = 0
         
-        try:
-            # Build search URL
-            url = self._build_search_url(query, start_date, end_date, source)
-            driver.get(url)
-            time.sleep(self._get_random_delay())
-            
-            # Handle captcha if present
-            if not self._handle_captcha(driver):
-                logger.error("Failed to handle captcha")
-                return articles
-            
-            # Wait for search results
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "g"))
-            )
-            
-            # Scroll to load all results
-            self._scroll_to_bottom(driver)
-            
-            # Parse results
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            results = soup.find_all(class_="g")
-            
-            for result in results:
-                article = self._extract_article_info(result)
-                if article and article['url'] not in self.processed_urls:
-                    articles.append(article)
-                    self.processed_urls.add(article['url'])
-            
-            logger.info(f"Found {len(articles)} articles from {source}")
-            return articles
-            
-        except Exception as e:
-            logger.error(f"Error searching {source}: {str(e)}")
-            return articles
-            
-        finally:
-            driver.quit()
+        while retry_count < max_retries:
+            driver = None
+            try:
+                # Build search URL
+                url = self._build_search_url(query, start_date, end_date, source)
+                
+                # Initialize driver
+                driver = self._setup_driver()
+                
+                # Add cookies to appear more like a real browser
+                driver.get("https://www.google.com")
+                time.sleep(self._get_random_delay())
+                
+                # Now navigate to the search URL
+                driver.get(url)
+                time.sleep(self._get_random_delay())
+                
+                # Handle captcha if present
+                if not self._handle_captcha(driver):
+                    logger.warning("Captcha detected, retrying with new session...")
+                    retry_count += 1
+                    continue
+                
+                # Wait for search results with a longer timeout
+                try:
+                    WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "g"))
+                    )
+                except TimeoutException:
+                    logger.warning("No results found, might be blocked. Retrying...")
+                    retry_count += 1
+                    continue
+                
+                # Add some random mouse movements
+                actions = ActionChains(driver)
+                for _ in range(3):
+                    actions.move_by_offset(random.randint(-100, 100), random.randint(-100, 100))
+                    actions.pause(random.uniform(0.1, 0.3))
+                actions.perform()
+                
+                # Scroll slowly to load all results
+                screen_heights = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);")
+                current_position = 0
+                step = random.randint(300, 500)  # Random step size
+                
+                while current_position < screen_heights:
+                    current_position = min(current_position + step, screen_heights)
+                    driver.execute_script(f"window.scrollTo(0, {current_position});")
+                    time.sleep(random.uniform(0.5, 1.0))  # Random delay while scrolling
+                
+                # Parse results
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                results = soup.find_all(class_="g")
+                
+                if not results:
+                    logger.warning("No results found in the page, might need to retry")
+                    retry_count += 1
+                    continue
+                
+                for result in results:
+                    article = self._extract_article_info(result)
+                    if article and article['url'] not in self.processed_urls:
+                        articles.append(article)
+                        self.processed_urls.add(article['url'])
+                
+                logger.info(f"Found {len(articles)} articles from {source}")
+                
+                # If we got here successfully, break the retry loop
+                break
+                
+            except Exception as e:
+                logger.error(f"Error searching {source}: {str(e)}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.info(f"Retrying... (attempt {retry_count + 1} of {max_retries})")
+                    time.sleep(random.uniform(5, 10))  # Add longer delay between retries
+                
+            finally:
+                if driver:
+                    try:
+                        driver.quit()
+                    except:
+                        pass
+        
+        return articles
     
     def search_all_sources(self, query: str, start_date: str, end_date: str) -> List[Dict]:
         """Search all target sources for articles within the date range."""
