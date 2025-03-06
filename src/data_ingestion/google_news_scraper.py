@@ -86,30 +86,61 @@ class GoogleNewsScraper:
     
     def _setup_driver(self) -> webdriver.Chrome:
         """Set up and return an undetectable Chrome WebDriver."""
-        options = uc.ChromeOptions()
-        
-        if self.headless:
-            options.add_argument("--headless")
-        
-        # Add anti-detection measures
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--disable-extensions")
-        options.add_argument('--disable-infobars')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-browser-side-navigation')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument('--ignore-ssl-errors')
-        options.add_argument(f'--user-agent={self.user_agent.random}')
-        
-        # Create undetectable Chrome driver
-        driver = uc.Chrome(options=options)
-        
-        # Set window size to a common resolution
-        driver.set_window_size(1920, 1080)
-        
-        return driver
+        try:
+            # Initialize options with undetected_chromedriver
+            options = uc.ChromeOptions()
+            
+            # Add anti-detection measures
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-infobars')
+            options.add_argument('--disable-browser-side-navigation')
+            options.add_argument('--ignore-certificate-errors')
+            options.add_argument('--ignore-ssl-errors')
+            options.add_argument('--start-maximized')
+            options.add_argument('--window-size=1920,1080')
+            options.add_argument(f'--user-agent={self.user_agent.random}')
+            
+            # Set page load strategy to eager to avoid waiting for all resources
+            options.page_load_strategy = 'eager'
+            
+            if self.headless:
+                options.add_argument('--headless=new')  # Use new headless mode
+            
+            # Create undetectable Chrome driver with a longer timeout
+            driver = uc.Chrome(
+                options=options,
+                driver_executable_path=None,  # Let it auto-download
+                browser_executable_path=None,  # Use default Chrome
+                suppress_welcome=True,
+                use_subprocess=True,
+            )
+            
+            # Set window size explicitly after creation
+            driver.set_window_size(1920, 1080)
+            
+            # Add additional JavaScript to make detection harder
+            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": """
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => [1, 2, 3, 4, 5]
+                    });
+                    window.chrome = {
+                        runtime: {}
+                    };
+                """
+            })
+            
+            return driver
+            
+        except Exception as e:
+            logger.error(f"Error setting up Chrome driver: {str(e)}")
+            raise
     
     def _format_google_date(self, date_str: str) -> str:
         """Format date for Google News URL."""
