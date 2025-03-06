@@ -44,13 +44,29 @@ logging.basicConfig(
 class GoogleNewsScraper:
     """Advanced Google News scraper with anti-detection and comprehensive coverage."""
     
-    def __init__(self, headless=True):
-        """Initialize the Google News scraper."""
+    def __init__(self, 
+                 headless: bool = True,
+                 use_proxy: bool = False,
+                 max_workers: int = 3,
+                 data_dir: str = 'data/google_news',
+                 delay_range: Tuple[float, float] = (2.0, 5.0)):
+        """Initialize the Google News scraper.
+        
+        Args:
+            headless: Whether to run the browser in headless mode
+            use_proxy: Whether to use proxy rotation
+            max_workers: Maximum number of parallel workers
+            data_dir: Directory to store scraped data
+            delay_range: Range for random delay between requests (min, max)
+        """
         self.logger = logging.getLogger(__name__)
         self.headless = headless
+        self.use_proxy = use_proxy
+        self.max_workers = max_workers
+        self.data_dir = data_dir
+        self.delay_range = delay_range
         self.driver = None
-        self._setup_driver()
-
+        
         # Target sources
         self.target_sources = {
             'bloomberg.com': 'Bloomberg',
@@ -59,12 +75,22 @@ class GoogleNewsScraper:
         }
         
         # Create data directory if it doesn't exist
-        self.data_dir = 'data/google_news'
         os.makedirs(self.data_dir, exist_ok=True)
         
         # Set of processed URLs to avoid duplicates
         self.processed_urls = set()
         
+        # Initialize the driver
+        self._setup_driver()
+
+    def __del__(self):
+        """Clean up resources."""
+        if self.driver:
+            try:
+                self.driver.quit()
+            except:
+                pass
+
     def _setup_driver(self):
         """Set up the undetected Chrome driver with optimal settings."""
         try:
@@ -121,17 +147,9 @@ class GoogleNewsScraper:
             self.logger.error(f"Failed to initialize Chrome driver: {str(e)}")
             raise
 
-    def __del__(self):
-        """Clean up resources."""
-        if self.driver:
-            try:
-                self.driver.quit()
-            except:
-                pass
-
     def _get_random_delay(self) -> float:
         """Get random delay between requests."""
-        return random.uniform(2.0, 5.0)
+        return random.uniform(self.delay_range[0], self.delay_range[1])
     
     def _format_google_date(self, date_str: str) -> str:
         """Format date for Google News URL."""
