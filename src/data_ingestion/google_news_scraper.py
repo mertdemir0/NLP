@@ -40,33 +40,17 @@ logging.basicConfig(
         logging.FileHandler('google_news_scraping.log')
     ]
 )
-logger = logging.getLogger(__name__)
 
 class GoogleNewsScraper:
     """Advanced Google News scraper with anti-detection and comprehensive coverage."""
     
-    def __init__(self, 
-                 headless: bool = True,
-                 use_proxy: bool = False,
-                 max_workers: int = 3,
-                 data_dir: str = 'data/google_news',
-                 delay_range: Tuple[float, float] = (2.0, 5.0)):
-        """Initialize the Google News scraper.
-        
-        Args:
-            headless: Whether to run the browser in headless mode
-            use_proxy: Whether to use proxy rotation
-            max_workers: Maximum number of parallel workers
-            data_dir: Directory to store scraped data
-            delay_range: Range for random delay between requests (min, max)
-        """
+    def __init__(self, headless=True):
+        """Initialize the Google News scraper."""
+        self.logger = logging.getLogger(__name__)
         self.headless = headless
-        self.use_proxy = use_proxy
-        self.max_workers = max_workers
-        self.data_dir = data_dir
-        self.delay_range = delay_range
-        self.user_agent = UserAgent()
-        
+        self.driver = None
+        self._setup_driver()
+
         # Target sources
         self.target_sources = {
             'bloomberg.com': 'Bloomberg',
@@ -75,72 +59,79 @@ class GoogleNewsScraper:
         }
         
         # Create data directory if it doesn't exist
+        self.data_dir = 'data/google_news'
         os.makedirs(self.data_dir, exist_ok=True)
         
         # Set of processed URLs to avoid duplicates
         self.processed_urls = set()
         
-    def _get_random_delay(self) -> float:
-        """Get random delay between requests."""
-        return random.uniform(self.delay_range[0], self.delay_range[1])
-    
-    def _setup_driver(self) -> webdriver.Chrome:
-        """Set up and return an undetectable Chrome WebDriver."""
+    def _setup_driver(self):
+        """Set up the undetected Chrome driver with optimal settings."""
         try:
-            # Initialize options with undetected_chromedriver
             options = uc.ChromeOptions()
             
-            # Add anti-detection measures
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            options.add_argument('--disable-extensions')
-            options.add_argument('--disable-infobars')
-            options.add_argument('--disable-browser-side-navigation')
-            options.add_argument('--ignore-certificate-errors')
-            options.add_argument('--ignore-ssl-errors')
-            options.add_argument('--start-maximized')
-            options.add_argument('--window-size=1920,1080')
-            options.add_argument(f'--user-agent={self.user_agent.random}')
-            
-            # Set page load strategy to eager to avoid waiting for all resources
-            options.page_load_strategy = 'eager'
-            
             if self.headless:
-                options.add_argument('--headless=new')  # Use new headless mode
+                options.add_argument('--headless')
             
-            # Create undetectable Chrome driver with a longer timeout
-            driver = uc.Chrome(
-                options=options,
-                driver_executable_path=None,  # Let it auto-download
-                browser_executable_path=None,  # Use default Chrome
-                suppress_welcome=True,
-                use_subprocess=True,
-            )
+            # Essential settings for undetectability
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-gpu')
             
-            # Set window size explicitly after creation
-            driver.set_window_size(1920, 1080)
+            # Random window size for added variation
+            width = random.randint(1200, 1600)
+            height = random.randint(800, 1000)
+            options.add_argument(f'--window-size={width},{height}')
             
-            # Add additional JavaScript to make detection harder
-            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5]
-                    });
-                    window.chrome = {
-                        runtime: {}
-                    };
-                """
-            })
+            # Set random user agent
+            user_agents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36'
+            ]
+            options.add_argument(f'user-agent={random.choice(user_agents)}')
             
-            return driver
-            
+            # Initialize driver with retry mechanism
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    self.driver = uc.Chrome(options=options)
+                    self.driver.set_page_load_timeout(30)
+                    
+                    # Set random geolocation
+                    self.driver.execute_cdp_cmd('Emulation.setGeolocationOverride', {
+                        'latitude': random.uniform(30, 50),
+                        'longitude': random.uniform(-120, -70),
+                        'accuracy': 100
+                    })
+                    
+                    # Clear cookies and cache
+                    self.driver.execute_cdp_cmd('Network.clearBrowserCache', {})
+                    self.driver.execute_cdp_cmd('Network.clearBrowserCookies', {})
+                    
+                    break
+                except Exception as e:
+                    self.logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                    if attempt == max_retries - 1:
+                        raise
+                    time.sleep((attempt + 1) * 2)
+
         except Exception as e:
-            logger.error(f"Error setting up Chrome driver: {str(e)}")
+            self.logger.error(f"Failed to initialize Chrome driver: {str(e)}")
             raise
+
+    def __del__(self):
+        """Clean up resources."""
+        if self.driver:
+            try:
+                self.driver.quit()
+            except:
+                pass
+
+    def _get_random_delay(self) -> float:
+        """Get random delay between requests."""
+        return random.uniform(2.0, 5.0)
     
     def _format_google_date(self, date_str: str) -> str:
         """Format date for Google News URL."""
@@ -234,7 +225,7 @@ class GoogleNewsScraper:
             }
             
         except Exception as e:
-            logger.error(f"Error extracting article info: {str(e)}")
+            self.logger.error(f"Error extracting article info: {str(e)}")
             return None
     
     def _scroll_to_bottom(self, driver: webdriver.Chrome):
@@ -272,7 +263,7 @@ class GoogleNewsScraper:
             
             for selector in captcha_selectors:
                 if driver.find_elements(By.XPATH, selector):
-                    logger.warning("Captcha detected! Implementing bypass strategy...")
+                    self.logger.warning("Captcha detected! Implementing bypass strategy...")
                     
                     # Save cookies before handling captcha
                     cookies = driver.get_cookies()
@@ -341,14 +332,14 @@ class GoogleNewsScraper:
                             continue
                     
                     # If we get here, we couldn't solve the captcha
-                    logger.warning("Failed to solve captcha automatically")
+                    self.logger.warning("Failed to solve captcha automatically")
                     return False
             
             # No captcha detected
             return True
             
         except Exception as e:
-            logger.error(f"Error handling captcha: {str(e)}")
+            self.logger.error(f"Error handling captcha: {str(e)}")
             return False
 
     def _wait_and_find_element(self, by, value, timeout=20, retries=3):
@@ -362,7 +353,7 @@ class GoogleNewsScraper:
                 return element
             except Exception as e:
                 if attempt < retries - 1:
-                    logger.info(f"Retry {attempt + 1}: Element {value} not ready, waiting...")
+                    self.logger.info(f"Retry {attempt + 1}: Element {value} not ready, waiting...")
                     # Exponential backoff
                     time.sleep((attempt + 1) * random.uniform(2, 4))
                     # Refresh page on last retry
@@ -382,7 +373,7 @@ class GoogleNewsScraper:
                 )
                 return True
             except Exception as e:
-                logger.error(f"Error navigating to {url}: {str(e)}")
+                self.logger.error(f"Error navigating to {url}: {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep((attempt + 1) * random.uniform(2, 4))
                 else:
@@ -403,7 +394,7 @@ class GoogleNewsScraper:
             action.perform()
             return True
         except Exception as e:
-            logger.error(f"Error clicking element: {str(e)}")
+            self.logger.error(f"Error clicking element: {str(e)}")
             # Fallback to regular click
             element.click()
 
@@ -416,7 +407,7 @@ class GoogleNewsScraper:
                 time.sleep(random.uniform(0.05, 0.15))
             return True
         except Exception as e:
-            logger.error(f"Error typing text: {str(e)}")
+            self.logger.error(f"Error typing text: {str(e)}")
             # Fallback to regular send_keys
             element.send_keys(text)
 
@@ -430,7 +421,7 @@ class GoogleNewsScraper:
     def _search_source(self, source: str, query: str, start_date: str, end_date: str):
         """Search for articles from a specific source within date range."""
         try:
-            logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
+            self.logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
             
             # Navigate to Google News with retry
             self._safe_get("https://news.google.com")
@@ -512,15 +503,15 @@ class GoogleNewsScraper:
             return self._extract_articles()
             
         except Exception as e:
-            logger.error(f"Error searching {source}: {str(e)}")
+            self.logger.error(f"Error searching {source}: {str(e)}")
             if "element not interactable" in str(e):
-                logger.info("Page elements not ready, increasing wait time")
+                self.logger.info("Page elements not ready, increasing wait time")
                 time.sleep(random.uniform(5, 8))
             raise
 
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
         """Search Google News for articles from a specific source within date range."""
-        logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
+        self.logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
         
         articles = []
         max_retries = 3
@@ -533,7 +524,7 @@ class GoogleNewsScraper:
                 url = self._build_search_url(query, start_date, end_date, source)
                 
                 # Initialize driver with new profile each time
-                driver = self._setup_driver()
+                driver = self.driver
                 
                 # First visit Google homepage and wait
                 driver.get("https://www.google.com")
@@ -561,7 +552,7 @@ class GoogleNewsScraper:
                 
                 # Handle captcha if present
                 if not self._handle_captcha(driver):
-                    logger.warning("Captcha detected, retrying with new session...")
+                    self.logger.warning("Captcha detected, retrying with new session...")
                     retry_count += 1
                     time.sleep(random.uniform(30, 60))  # Longer wait before retry
                     continue
@@ -572,7 +563,7 @@ class GoogleNewsScraper:
                         EC.presence_of_element_located((By.CLASS_NAME, "g"))
                     )
                 except TimeoutException:
-                    logger.warning("No results found, might be blocked. Retrying...")
+                    self.logger.warning("No results found, might be blocked. Retrying...")
                     retry_count += 1
                     time.sleep(random.uniform(20, 40))  # Longer wait before retry
                     continue
@@ -599,7 +590,7 @@ class GoogleNewsScraper:
                 results = soup.find_all(class_="g")
                 
                 if not results:
-                    logger.warning("No results found in the page, might need to retry")
+                    self.logger.warning("No results found in the page, might need to retry")
                     retry_count += 1
                     time.sleep(random.uniform(15, 30))  # Longer wait before retry
                     continue
@@ -610,16 +601,16 @@ class GoogleNewsScraper:
                         articles.append(article)
                         self.processed_urls.add(article['url'])
                 
-                logger.info(f"Found {len(articles)} articles from {source}")
+                self.logger.info(f"Found {len(articles)} articles from {source}")
                 
                 # If we got here successfully, break the retry loop
                 break
                 
             except Exception as e:
-                logger.error(f"Error searching {source}: {str(e)}")
+                self.logger.error(f"Error searching {source}: {str(e)}")
                 retry_count += 1
                 if retry_count < max_retries:
-                    logger.info(f"Retrying... (attempt {retry_count + 1} of {max_retries})")
+                    self.logger.info(f"Retrying... (attempt {retry_count + 1} of {max_retries})")
                     time.sleep(random.uniform(20, 40))  # Longer delay between retries
                 
             finally:
@@ -637,7 +628,7 @@ class GoogleNewsScraper:
         
         # Generate weekly date ranges
         date_ranges = self._generate_weekly_ranges(start_date, end_date)
-        logger.info(f"Generated {len(date_ranges)} weekly ranges")
+        self.logger.info(f"Generated {len(date_ranges)} weekly ranges")
         
         # Search each source for each week
         for source_domain, source_name in self.target_sources.items():
@@ -649,18 +640,18 @@ class GoogleNewsScraper:
                     articles = self._search_source(source_domain, query, week_start, week_end)
                     all_articles.extend(articles)
                     
-                    logger.info(
+                    self.logger.info(
                         f"Completed {source_name} search for week {week_start} to {week_end}: "
                         f"{len(articles)} articles found"
                     )
                     
                 except Exception as e:
-                    logger.error(
+                    self.logger.error(
                         f"Error searching {source_name} for week {week_start} to {week_end}: "
                         f"{str(e)}"
                     )
         
-        logger.info(f"Total articles found across all sources: {len(all_articles)}")
+        self.logger.info(f"Total articles found across all sources: {len(all_articles)}")
         return all_articles
     
     def save_articles(self, articles: List[Dict], filename: str = None) -> str:
@@ -674,7 +665,7 @@ class GoogleNewsScraper:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(articles, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Saved {len(articles)} articles to {filepath}")
+        self.logger.info(f"Saved {len(articles)} articles to {filepath}")
         return filepath
     
     def save_to_csv(self, articles: List[Dict], filename: str = None) -> str:
@@ -689,12 +680,12 @@ class GoogleNewsScraper:
         df = pd.DataFrame(articles)
         df.to_csv(filepath, index=False, encoding='utf-8')
         
-        logger.info(f"Saved {len(articles)} articles to {filepath}")
+        self.logger.info(f"Saved {len(articles)} articles to {filepath}")
         return filepath
     
     def run(self, query: str, start_date: str, end_date: str) -> List[Dict]:
         """Run the Google News scraper for the given query and date range."""
-        logger.info(
+        self.logger.info(
             f"Starting Google News scraper for query '{query}' "
             f"from {start_date} to {end_date}"
         )
