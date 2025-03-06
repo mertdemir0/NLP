@@ -30,6 +30,7 @@ from fake_useragent import UserAgent
 import undetected_chromedriver as uc
 from bs4 import BeautifulSoup
 import pandas as pd
+import urllib.parse
 
 # Configure logging
 logging.basicConfig(
@@ -445,77 +446,152 @@ class GoogleSearchScraper:
             self._safe_get("https://www.google.com")
             time.sleep(random.uniform(3, 5))
             
-            # Find and interact with search box
-            search_box = self._wait_and_find_element(
-                By.NAME, "q",
-                timeout=20
-            )
+            # Find and interact with search box using multiple selectors
+            search_selectors = [
+                (By.NAME, "q"),
+                (By.CSS_SELECTOR, "input[type='text']"),
+                (By.CSS_SELECTOR, "input[title='Search']")
+            ]
+            
+            search_box = None
+            for by, selector in search_selectors:
+                try:
+                    search_box = self._wait_and_find_element(by, selector, timeout=10)
+                    if search_box:
+                        break
+                except:
+                    continue
+                    
+            if not search_box:
+                raise Exception("Could not find search box")
+            
+            # Clear and type with human-like behavior
             search_box.clear()
             time.sleep(random.uniform(1, 2))
             
             # Type query with site filter
             self._human_type(search_box, f"site:{source} {query}")
             search_box.send_keys(Keys.RETURN)
-            time.sleep(random.uniform(2, 4))
-            
-            # Click on News tab
-            news_tab = self._wait_and_find_element(
-                By.XPATH,
-                "//a[contains(@href, '/news') and (contains(text(), 'News') or .//span[contains(text(), 'News')])]",
-                timeout=20
-            )
-            self._human_click(news_tab)
-            time.sleep(random.uniform(2, 4))
-            
-            # Click Tools button
-            tools_button = self._wait_and_find_element(
-                By.XPATH,
-                "//div[text()='Tools' or @aria-label='Tools']",
-                timeout=20
-            )
-            self._human_click(tools_button)
-            time.sleep(random.uniform(1, 2))
-            
-            # Click Any time dropdown
-            time_dropdown = self._wait_and_find_element(
-                By.XPATH,
-                "//div[contains(@class, 'hdtb-mn-hd') and .//span[contains(text(), 'Any time')]]",
-                timeout=20
-            )
-            self._human_click(time_dropdown)
-            time.sleep(random.uniform(1, 2))
-            
-            # Click Custom range
-            custom_range = self._wait_and_find_element(
-                By.XPATH,
-                "//div[contains(@class, 'y0fQ9c') and contains(., 'Custom range')]",
-                timeout=20
-            )
-            self._human_click(custom_range)
-            time.sleep(random.uniform(1, 2))
-            
-            # Input date range
-            start_input = self._wait_and_find_element(By.CSS_SELECTOR, "input#OouJcb")
-            end_input = self._wait_and_find_element(By.CSS_SELECTOR, "input#rzG2be")
-            
-            start_input.clear()
-            time.sleep(random.uniform(0.5, 1))
-            self._human_type(start_input, start_date)
-            time.sleep(random.uniform(0.5, 1))
-            
-            end_input.clear()
-            time.sleep(random.uniform(0.5, 1))
-            self._human_type(end_input, end_date)
-            time.sleep(random.uniform(0.5, 1))
-            
-            # Click Go button
-            go_button = self._wait_and_find_element(
-                By.XPATH,
-                "//button[contains(., 'Go')]",
-                timeout=20
-            )
-            self._human_click(go_button)
             time.sleep(random.uniform(3, 5))
+            
+            # Click News tab using multiple strategies
+            news_selectors = [
+                "//a[contains(@href, '/news') and contains(text(), 'News')]",
+                "//a[contains(@href, '/news') and .//span[contains(text(), 'News')]]",
+                "//div[@role='navigation']//a[contains(@href, '/news')]",
+                "//div[contains(@class, 'hdtb-mitem')]//a[contains(@href, '/news')]"
+            ]
+            
+            for selector in news_selectors:
+                try:
+                    news_tab = self._wait_and_find_element(By.XPATH, selector, timeout=10)
+                    if news_tab:
+                        self._human_click(news_tab)
+                        time.sleep(random.uniform(2, 4))
+                        break
+                except:
+                    continue
+            
+            # Click Tools using multiple strategies
+            tools_selectors = [
+                "//div[text()='Tools']",
+                "//div[@aria-label='Tools']",
+                "//span[text()='Tools']",
+                "//div[contains(@class, 'hdtb-mitem')][contains(., 'Tools')]"
+            ]
+            
+            for selector in tools_selectors:
+                try:
+                    tools_button = self._wait_and_find_element(By.XPATH, selector, timeout=10)
+                    if tools_button:
+                        self._human_click(tools_button)
+                        time.sleep(random.uniform(2, 3))
+                        break
+                except:
+                    continue
+            
+            # Click Any time dropdown using multiple strategies
+            time_selectors = [
+                "//div[contains(@class, 'hdtb-mn-hd')][.//span[contains(text(), 'Any time')]]",
+                "//g-popup[contains(@class, 'timerange')]//span[contains(text(), 'Any time')]",
+                "//div[@aria-label='Time']",
+                "//div[contains(@class, 'KTBKoe')]"
+            ]
+            
+            for selector in time_selectors:
+                try:
+                    time_dropdown = self._wait_and_find_element(By.XPATH, selector, timeout=10)
+                    if time_dropdown:
+                        self._human_click(time_dropdown)
+                        time.sleep(random.uniform(2, 3))
+                        break
+                except:
+                    continue
+            
+            # Click Custom range using multiple strategies
+            custom_selectors = [
+                "//div[contains(@class, 'y0fQ9c')][contains(., 'Custom range')]",
+                "//g-menu-item[contains(., 'Custom range')]",
+                "//div[@role='menuitem'][contains(., 'Custom range')]"
+            ]
+            
+            for selector in custom_selectors:
+                try:
+                    custom_range = self._wait_and_find_element(By.XPATH, selector, timeout=10)
+                    if custom_range:
+                        self._human_click(custom_range)
+                        time.sleep(random.uniform(2, 3))
+                        break
+                except:
+                    continue
+            
+            # Input date range using multiple strategies
+            date_input_selectors = [
+                ("input#OouJcb", "input#rzG2be"),
+                ("input[aria-label*='Start date']", "input[aria-label*='End date']"),
+                ("input.cEZxRc", "input.WZvVqe")
+            ]
+            
+            start_input = end_input = None
+            for start_sel, end_sel in date_input_selectors:
+                try:
+                    start_input = self._wait_and_find_element(By.CSS_SELECTOR, start_sel, timeout=10)
+                    end_input = self._wait_and_find_element(By.CSS_SELECTOR, end_sel, timeout=10)
+                    if start_input and end_input:
+                        break
+                except:
+                    continue
+                    
+            if not (start_input and end_input):
+                raise Exception("Could not find date input fields")
+            
+            # Clear and input dates with human-like behavior
+            for input_field in [start_input, end_input]:
+                input_field.clear()
+                time.sleep(random.uniform(0.5, 1))
+            
+            self._human_type(start_input, start_date)
+            time.sleep(random.uniform(1, 2))
+            self._human_type(end_input, end_date)
+            time.sleep(random.uniform(1, 2))
+            
+            # Click Go button using multiple strategies
+            go_selectors = [
+                "//button[contains(., 'Go')]",
+                "//g-button[contains(., 'Go')]",
+                "//div[@role='button'][contains(., 'Go')]",
+                "//span[contains(@class, 'z1asCe')][contains(., 'Go')]"
+            ]
+            
+            for selector in go_selectors:
+                try:
+                    go_button = self._wait_and_find_element(By.XPATH, selector, timeout=10)
+                    if go_button:
+                        self._human_click(go_button)
+                        time.sleep(random.uniform(3, 5))
+                        break
+                except:
+                    continue
             
             # Scroll to load more results
             self._scroll_page()
@@ -572,70 +648,164 @@ class GoogleSearchScraper:
 
     def _extract_articles(self):
         """Extract articles from the current page."""
+        articles = []
         try:
-            # Parse results
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            # Multiple selectors for article containers
+            article_selectors = [
+                "div.SoaBEf",  # Primary Google News selector
+                "div.WlydOe",  # Alternative container
+                "div[role='article']",  # Role-based selector
+                "div.g",  # Generic Google result
+                "div.xuvV6b",  # Another news container
+            ]
             
-            # Look for news article containers
-            results = soup.find_all('div', {'class': ['g', 'xuvV6b', 'BGxR7d']})
-            
-            if not results:
-                self.logger.warning("No results found in the page")
-                return []
-            
-            articles = []
-            for result in results:
+            article_elements = []
+            for selector in article_selectors:
                 try:
-                    # Find title and link
-                    title_elem = result.find('h3') or result.find('div', {'role': 'heading'})
-                    link_elem = result.find('a')
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    if elements:
+                        article_elements.extend(elements)
+                        break
+                except:
+                    continue
                     
-                    if not title_elem or not link_elem:
+            if not article_elements:
+                self.logger.warning("No article elements found with primary selectors")
+                # Fallback to any div containing an article-like structure
+                article_elements = self.driver.find_elements(
+                    By.XPATH,
+                    "//div[.//a[contains(@href, 'http') or contains(@href, 'https')] and .//h3]"
+                )
+            
+            for article in article_elements:
+                try:
+                    # Multiple selectors for title
+                    title_selectors = [
+                        ".//h3[contains(@class, 'r')]/a",
+                        ".//h3/a",
+                        ".//a[contains(@class, 'DY5T1d')]",
+                        ".//div[contains(@class, 'vvjwJb')]//a",
+                        ".//a[contains(@class, 'WlydOe')]"
+                    ]
+                    
+                    title_element = None
+                    title_text = ""
+                    for selector in title_selectors:
+                        try:
+                            title_element = article.find_element(By.XPATH, selector)
+                            if title_element:
+                                title_text = title_element.text.strip()
+                                if title_text:
+                                    break
+                        except:
+                            continue
+                    
+                    if not title_text:
+                        # Fallback to any h3 or strong text
+                        try:
+                            title_element = article.find_element(By.XPATH, ".//h3 | .//strong")
+                            title_text = title_element.text.strip()
+                        except:
+                            continue
+                    
+                    # Multiple selectors for URL
+                    url_selectors = [
+                        ".//a[contains(@class, 'WlydOe')]",
+                        ".//h3/a",
+                        ".//a[contains(@href, 'http')]",
+                        ".//a[contains(@class, 'VDXfz')]"
+                    ]
+                    
+                    url = ""
+                    for selector in url_selectors:
+                        try:
+                            url_element = article.find_element(By.XPATH, selector)
+                            if url_element:
+                                url = url_element.get_attribute("href")
+                                if url and ("http" in url or "https" in url):
+                                    break
+                        except:
+                            continue
+                            
+                    if not url:
                         continue
                         
-                    title = title_elem.get_text(strip=True)
-                    url = link_elem.get('href', '')
+                    # Clean URL by removing Google redirects
+                    url = self._clean_url(url)
                     
-                    # Clean URL if needed
-                    if url.startswith('/url?'):
-                        url = url.split('url=')[1].split('&')[0]
+                    # Multiple selectors for snippet
+                    snippet_selectors = [
+                        ".//div[contains(@class, 'VwiC3b')]",
+                        ".//div[contains(@class, 'st')]",
+                        ".//div[@class='snipp']",
+                        ".//div[contains(@style, 'color')]"
+                    ]
                     
-                    # Skip if already processed
-                    if url in self.processed_urls:
-                        continue
+                    snippet = ""
+                    for selector in snippet_selectors:
+                        try:
+                            snippet_element = article.find_element(By.XPATH, selector)
+                            if snippet_element:
+                                snippet = snippet_element.text.strip()
+                                if snippet:
+                                    break
+                        except:
+                            continue
+                            
+                    # Multiple selectors for date
+                    date_selectors = [
+                        ".//time",
+                        ".//span[contains(@class, 'WG9SHc')]",
+                        ".//div[contains(@class, 'OSrXXb')]",
+                        ".//span[contains(text(), ' ago')]"
+                    ]
                     
-                    # Find date
-                    date_elem = result.find('span', {'class': ['r0bn4c', 'rQMQod']}) or \
-                               result.find('div', {'class': 'slp'}) or \
-                               result.find('span', string=lambda text: text and ('ago' in text.lower() or 'min' in text.lower()))
+                    date = ""
+                    for selector in date_selectors:
+                        try:
+                            date_element = article.find_element(By.XPATH, selector)
+                            if date_element:
+                                date = date_element.text.strip()
+                                if date:
+                                    break
+                        except:
+                            continue
                     
-                    published_date = date_elem.get_text(strip=True) if date_elem else ''
-                    
-                    # Find snippet
-                    snippet_elem = result.find('div', {'class': ['VwiC3b', 'yXK7lf']}) or \
-                                 result.find('div', {'style': 'line-height:1.58;'})
-                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
-                    
-                    article = {
-                        'title': title,
-                        'url': url,
-                        'published_date': published_date,
-                        'snippet': snippet
-                    }
-                    
-                    articles.append(article)
-                    self.processed_urls.add(url)
-                    
+                    # Only add article if we have at least title and URL
+                    if title_text and url:
+                        article_data = {
+                            'title': title_text,
+                            'url': url,
+                            'snippet': snippet,
+                            'date': date
+                        }
+                        articles.append(article_data)
+                        
                 except Exception as e:
-                    self.logger.error(f"Error extracting article: {str(e)}")
+                    self.logger.warning(f"Error extracting article data: {str(e)}")
                     continue
             
-            self.logger.info(f"Found {len(articles)} articles")
-            return articles
+            self.logger.info(f"Extracted {len(articles)} articles")
             
         except Exception as e:
-            self.logger.error(f"Error extracting articles: {str(e)}")
-            return []
+            self.logger.error(f"Error during article extraction: {str(e)}")
+            
+        return articles
+        
+    def _clean_url(self, url: str) -> str:
+        """Clean Google redirect URLs to get the actual article URL."""
+        try:
+            # Handle Google redirect URLs
+            if "/url?" in url:
+                parsed = urllib.parse.urlparse(url)
+                query_params = urllib.parse.parse_qs(parsed.query)
+                if 'url' in query_params:
+                    return query_params['url'][0]
+                elif 'q' in query_params:
+                    return query_params['q'][0]
+            return url
+        except:
+            return url
 
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
         """Search Google Search for articles from a specific source within date range."""
