@@ -441,83 +441,28 @@ class GoogleNewsScraper:
         try:
             self.logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
             
-            # Navigate to Google News with retry
-            self._safe_get("https://news.google.com")
+            # Navigate directly to Google News search
+            search_url = f"https://news.google.com/search?q=site:{source}%20{quote(query)}"
+            self._safe_get(search_url)
             time.sleep(random.uniform(3, 5))
             
-            # Try multiple search button selectors
-            search_selectors = [
-                (By.CLASS_NAME, "gb_Ue"),
-                (By.XPATH, "//button[@aria-label='Search']"),
-                (By.CSS_SELECTOR, "button[aria-label='Search']")
-            ]
+            # Wait for search box to be present
+            search_box = self._wait_and_find_element(
+                By.CSS_SELECTOR, 
+                "input[type='text'], input[name='q'], input[aria-label*='Search']"
+            )
             
-            search_button = None
-            for by, selector in search_selectors:
-                try:
-                    search_button = self._wait_and_find_element(by, selector)
-                    break
-                except:
-                    continue
-            
-            if not search_button:
-                raise Exception("Could not find search button")
-            
-            self._human_click(search_button)
-            
-            # Enhanced search box handling
-            search_box = self._wait_and_find_element(By.NAME, "q")
-            self._human_type(search_box, f"site:{source} {query}")
+            # Clear and type the query with date filter
+            search_box.clear()
+            time.sleep(random.uniform(1, 2))
+            self._human_type(search_box, f"site:{source} {query} when:{start_date}-{end_date}")
             search_box.send_keys(Keys.RETURN)
             time.sleep(random.uniform(2, 4))
             
-            # Enhanced tools button handling with multiple attempts
-            tools_button = self._wait_and_find_element(
-                By.XPATH,
-                "//div[contains(text(), 'Tools') or contains(@aria-label, 'Tools')]"
-            )
-            self._human_click(tools_button)
-            time.sleep(random.uniform(2, 3))
+            # Scroll to load more results
+            self._scroll_page()
             
-            # Enhanced date filter handling
-            date_button = self._wait_and_find_element(
-                By.XPATH,
-                "//div[contains(@class, 'hdtb-mn-hd') and contains(., 'Any time')]"
-            )
-            self._human_click(date_button)
-            time.sleep(random.uniform(2, 3))
-            
-            # Wait for custom range with retry
-            custom_range = self._wait_and_find_element(
-                By.XPATH,
-                "//g-menu-item[contains(., 'Custom range...')]"
-            )
-            self._human_click(custom_range)
-            time.sleep(random.uniform(2, 3))
-            
-            # Enhanced date input handling with retries
-            start_input = self._wait_and_find_element(By.ID, "OouJcb")
-            end_input = self._wait_and_find_element(By.ID, "rzG2be")
-            
-            for input_field in [start_input, end_input]:
-                input_field.clear()
-                time.sleep(random.uniform(1, 2))
-            
-            self._human_type(start_input, start_date)
-            time.sleep(random.uniform(1, 2))
-            self._human_type(end_input, end_date)
-            time.sleep(random.uniform(1, 2))
-            
-            # Click go button with retry
-            go_button = self._wait_and_find_element(
-                By.XPATH,
-                "//g-button[contains(., 'Go')]"
-            )
-            self._human_click(go_button)
-            
-            # Extended wait for results
-            time.sleep(random.uniform(4, 6))
-            
+            # Extract articles
             return self._extract_articles()
             
         except Exception as e:
@@ -526,6 +471,46 @@ class GoogleNewsScraper:
                 self.logger.info("Page elements not ready, increasing wait time")
                 time.sleep(random.uniform(5, 8))
             raise
+
+    def _scroll_page(self):
+        """Scroll the page to load more results."""
+        try:
+            # Get initial height
+            last_height = self.driver.execute_script("return document.body.scrollHeight")
+            
+            while True:
+                # Scroll down with random steps
+                current_height = 0
+                while current_height < last_height:
+                    step = random.randint(300, 500)
+                    current_height = min(current_height + step, last_height)
+                    self.driver.execute_script(f"window.scrollTo(0, {current_height});")
+                    time.sleep(random.uniform(0.3, 0.7))
+                
+                # Add random mouse movements
+                actions = ActionChains(self.driver)
+                for _ in range(random.randint(2, 4)):
+                    actions.move_by_offset(
+                        random.randint(-100, 100),
+                        random.randint(-100, 100)
+                    )
+                    actions.pause(random.uniform(0.1, 0.3))
+                actions.perform()
+                
+                # Wait for possible new content
+                time.sleep(random.uniform(2, 4))
+                
+                # Calculate new scroll height
+                new_height = self.driver.execute_script("return document.body.scrollHeight")
+                
+                # Break if no more new content
+                if new_height == last_height:
+                    break
+                    
+                last_height = new_height
+                
+        except Exception as e:
+            self.logger.error(f"Error while scrolling: {str(e)}")
 
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
         """Search Google News for articles from a specific source within date range."""
