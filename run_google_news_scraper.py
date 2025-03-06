@@ -29,8 +29,8 @@ def parse_args():
     parser.add_argument('--end-date', type=str, default='2025-03-01',
                         help='End date in YYYY-MM-DD format (default: 2025-03-01)')
     
-    parser.add_argument('--headless', action='store_true', default=True,
-                        help='Run browser in headless mode (default: True)')
+    parser.add_argument('--no-headless', action='store_true',
+                        help='Run browser in visible mode (default: run in headless mode)')
     
     parser.add_argument('--workers', type=int, default=3,
                         help='Number of parallel workers (default: 3)')
@@ -50,7 +50,7 @@ def main():
     try:
         # Initialize scraper
         scraper = GoogleNewsScraper(
-            headless=args.headless,
+            headless=not args.no_headless,  # Invert the no-headless flag
             max_workers=args.workers,
             data_dir=args.output_dir
         )
