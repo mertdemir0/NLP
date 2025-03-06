@@ -351,7 +351,75 @@ class GoogleNewsScraper:
             logger.error(f"Error handling captcha: {str(e)}")
             return False
 
-    def _search_articles(self, query: str, start_date: str, end_date: str, source: str) -> List[Dict]:
+    def _search_source(self, source: str, query: str, start_date: str, end_date: str):
+        """Search for articles from a specific source within date range."""
+        try:
+            logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
+            
+            # Enhanced wait strategy
+            wait = WebDriverWait(self.driver, 20, poll_frequency=1)
+            
+            # Navigate to Google News
+            self._safe_get("https://news.google.com")
+            time.sleep(random.uniform(2, 4))
+            
+            # Wait for and click search button
+            search_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "gb_Ue")))
+            self._human_click(search_button)
+            
+            # Wait for search box and type query
+            search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
+            self._human_type(search_box, f"site:{source} {query}")
+            search_box.send_keys(Keys.RETURN)
+            
+            # Wait for Tools button and click
+            tools_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Tools')]")))
+            self._human_click(tools_button)
+            time.sleep(random.uniform(1, 2))
+            
+            # Wait for and click date filter
+            date_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'hdtb-mn-hd') and contains(., 'Any time')]")))
+            self._human_click(date_button)
+            time.sleep(random.uniform(1, 2))
+            
+            # Wait for and click custom range
+            custom_range = wait.until(EC.element_to_be_clickable((By.XPATH, "//g-menu-item[contains(., 'Custom range...')]")))
+            self._human_click(custom_range)
+            time.sleep(random.uniform(1, 2))
+            
+            # Enhanced date input handling
+            start_input = wait.until(EC.presence_of_element_located((By.ID, "OouJcb")))
+            end_input = wait.until(EC.presence_of_element_located((By.ID, "rzG2be")))
+            
+            # Clear existing dates
+            start_input.clear()
+            time.sleep(random.uniform(0.5, 1))
+            end_input.clear()
+            time.sleep(random.uniform(0.5, 1))
+            
+            # Input dates
+            self._human_type(start_input, start_date)
+            time.sleep(random.uniform(0.5, 1))
+            self._human_type(end_input, end_date)
+            
+            # Click go button
+            go_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//g-button[contains(., 'Go')]")))
+            self._human_click(go_button)
+            
+            # Wait for results to load
+            time.sleep(random.uniform(3, 5))
+            
+            # Extract and return results
+            return self._extract_articles()
+            
+        except Exception as e:
+            logger.error(f"Error searching {source}: {str(e)}")
+            if "element not interactable" in str(e):
+                logger.info("Page elements not ready, increasing wait time")
+                time.sleep(random.uniform(5, 8))
+            raise
+
+    def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
         """Search Google News for articles from a specific source within date range."""
         logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
         
@@ -479,7 +547,7 @@ class GoogleNewsScraper:
                     # Add random delay between weeks
                     time.sleep(self._get_random_delay())
                     
-                    articles = self._search_articles(query, week_start, week_end, source_domain)
+                    articles = self._search_source(source_domain, query, week_start, week_end)
                     all_articles.extend(articles)
                     
                     logger.info(
