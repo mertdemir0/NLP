@@ -1,6 +1,6 @@
-"""Google News scraper with advanced features.
+"""Google Search scraper with advanced features.
 
-This module provides a specialized scraper for Google News that:
+This module provides a specialized scraper for Google Search that:
 1. Uses weekly date ranges to ensure comprehensive coverage
 2. Implements advanced anti-detection techniques
 3. Targets specific news sources (Bloomberg, Reuters, FT)
@@ -37,20 +37,20 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('google_news_scraping.log')
+        logging.FileHandler('google_search_scraping.log')
     ]
 )
 
-class GoogleNewsScraper:
-    """Advanced Google News scraper with anti-detection and comprehensive coverage."""
+class GoogleSearchScraper:
+    """Advanced Google Search scraper with anti-detection and comprehensive coverage."""
     
     def __init__(self, 
                  headless: bool = True,
                  use_proxy: bool = False,
                  max_workers: int = 3,
-                 data_dir: str = 'data/google_news',
+                 data_dir: str = 'data/google_search',
                  delay_range: Tuple[float, float] = (2.0, 5.0)):
-        """Initialize the Google News scraper.
+        """Initialize the Google Search scraper.
         
         Args:
             headless: Whether to run the browser in headless mode
@@ -152,7 +152,7 @@ class GoogleNewsScraper:
         return random.uniform(self.delay_range[0], self.delay_range[1])
     
     def _format_google_date(self, date_str: str) -> str:
-        """Format date for Google News URL."""
+        """Format date for Google Search URL."""
         return datetime.strptime(date_str, '%Y-%m-%d').strftime('%m/%d/%Y')
     
     def _generate_weekly_ranges(self, start_date: str, end_date: str) -> List[Tuple[str, str]]:
@@ -174,7 +174,7 @@ class GoogleNewsScraper:
         return date_ranges
     
     def _build_search_url(self, query: str, start_date: str, end_date: str, source: str = None) -> str:
-        """Build Google News search URL with date range and optional source filter."""
+        """Build Google Search URL with date range and optional source filter."""
         base_url = "https://www.google.com/search"
         
         # Format dates for Google
@@ -200,7 +200,7 @@ class GoogleNewsScraper:
         return url
     
     def _extract_article_info(self, element: BeautifulSoup) -> Optional[Dict]:
-        """Extract article information from a Google News result element."""
+        """Extract article information from a Google Search result element."""
         try:
             # Find the main link
             link = element.find('a')
@@ -441,23 +441,81 @@ class GoogleNewsScraper:
         try:
             self.logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
             
-            # Navigate directly to Google News search
-            search_url = f"https://news.google.com/search?q=site:{source}%20{quote(query)}"
-            self._safe_get(search_url)
+            # Navigate to Google Search
+            self._safe_get("https://www.google.com")
             time.sleep(random.uniform(3, 5))
             
-            # Wait for search box to be present
+            # Find and interact with search box
             search_box = self._wait_and_find_element(
-                By.CSS_SELECTOR, 
-                "input[type='text'], input[name='q'], input[aria-label*='Search']"
+                By.NAME, "q",
+                timeout=20
             )
-            
-            # Clear and type the query with date filter
             search_box.clear()
             time.sleep(random.uniform(1, 2))
-            self._human_type(search_box, f"site:{source} {query} when:{start_date}-{end_date}")
+            
+            # Type query with site filter
+            self._human_type(search_box, f"site:{source} {query}")
             search_box.send_keys(Keys.RETURN)
             time.sleep(random.uniform(2, 4))
+            
+            # Click on News tab
+            news_tab = self._wait_and_find_element(
+                By.XPATH,
+                "//a[contains(@href, '/news') and (contains(text(), 'News') or .//span[contains(text(), 'News')])]",
+                timeout=20
+            )
+            self._human_click(news_tab)
+            time.sleep(random.uniform(2, 4))
+            
+            # Click Tools button
+            tools_button = self._wait_and_find_element(
+                By.XPATH,
+                "//div[text()='Tools' or @aria-label='Tools']",
+                timeout=20
+            )
+            self._human_click(tools_button)
+            time.sleep(random.uniform(1, 2))
+            
+            # Click Any time dropdown
+            time_dropdown = self._wait_and_find_element(
+                By.XPATH,
+                "//div[contains(@class, 'hdtb-mn-hd') and .//span[contains(text(), 'Any time')]]",
+                timeout=20
+            )
+            self._human_click(time_dropdown)
+            time.sleep(random.uniform(1, 2))
+            
+            # Click Custom range
+            custom_range = self._wait_and_find_element(
+                By.XPATH,
+                "//div[contains(@class, 'y0fQ9c') and contains(., 'Custom range')]",
+                timeout=20
+            )
+            self._human_click(custom_range)
+            time.sleep(random.uniform(1, 2))
+            
+            # Input date range
+            start_input = self._wait_and_find_element(By.CSS_SELECTOR, "input#OouJcb")
+            end_input = self._wait_and_find_element(By.CSS_SELECTOR, "input#rzG2be")
+            
+            start_input.clear()
+            time.sleep(random.uniform(0.5, 1))
+            self._human_type(start_input, start_date)
+            time.sleep(random.uniform(0.5, 1))
+            
+            end_input.clear()
+            time.sleep(random.uniform(0.5, 1))
+            self._human_type(end_input, end_date)
+            time.sleep(random.uniform(0.5, 1))
+            
+            # Click Go button
+            go_button = self._wait_and_find_element(
+                By.XPATH,
+                "//button[contains(., 'Go')]",
+                timeout=20
+            )
+            self._human_click(go_button)
+            time.sleep(random.uniform(3, 5))
             
             # Scroll to load more results
             self._scroll_page()
@@ -512,8 +570,75 @@ class GoogleNewsScraper:
         except Exception as e:
             self.logger.error(f"Error while scrolling: {str(e)}")
 
+    def _extract_articles(self):
+        """Extract articles from the current page."""
+        try:
+            # Parse results
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            
+            # Look for news article containers
+            results = soup.find_all('div', {'class': ['g', 'xuvV6b', 'BGxR7d']})
+            
+            if not results:
+                self.logger.warning("No results found in the page")
+                return []
+            
+            articles = []
+            for result in results:
+                try:
+                    # Find title and link
+                    title_elem = result.find('h3') or result.find('div', {'role': 'heading'})
+                    link_elem = result.find('a')
+                    
+                    if not title_elem or not link_elem:
+                        continue
+                        
+                    title = title_elem.get_text(strip=True)
+                    url = link_elem.get('href', '')
+                    
+                    # Clean URL if needed
+                    if url.startswith('/url?'):
+                        url = url.split('url=')[1].split('&')[0]
+                    
+                    # Skip if already processed
+                    if url in self.processed_urls:
+                        continue
+                    
+                    # Find date
+                    date_elem = result.find('span', {'class': ['r0bn4c', 'rQMQod']}) or \
+                               result.find('div', {'class': 'slp'}) or \
+                               result.find('span', string=lambda text: text and ('ago' in text.lower() or 'min' in text.lower()))
+                    
+                    published_date = date_elem.get_text(strip=True) if date_elem else ''
+                    
+                    # Find snippet
+                    snippet_elem = result.find('div', {'class': ['VwiC3b', 'yXK7lf']}) or \
+                                 result.find('div', {'style': 'line-height:1.58;'})
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+                    
+                    article = {
+                        'title': title,
+                        'url': url,
+                        'published_date': published_date,
+                        'snippet': snippet
+                    }
+                    
+                    articles.append(article)
+                    self.processed_urls.add(url)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error extracting article: {str(e)}")
+                    continue
+            
+            self.logger.info(f"Found {len(articles)} articles")
+            return articles
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting articles: {str(e)}")
+            return []
+
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
-        """Search Google News for articles from a specific source within date range."""
+        """Search Google Search for articles from a specific source within date range."""
         articles = []
         max_retries = 3
         retry_count = 0
@@ -532,37 +657,12 @@ class GoogleNewsScraper:
         
         return articles
 
-    def _extract_articles(self):
-        """Extract articles from the current page."""
-        try:
-            # Parse results
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            results = soup.find_all(class_="g")
-            
-            if not results:
-                self.logger.warning("No results found in the page, might need to retry")
-                return []
-            
-            articles = []
-            for result in results:
-                article = self._extract_article_info(result)
-                if article and article['url'] not in self.processed_urls:
-                    articles.append(article)
-                    self.processed_urls.add(article['url'])
-            
-            self.logger.info(f"Found {len(articles)} articles")
-            return articles
-        
-        except Exception as e:
-            self.logger.error(f"Error extracting articles: {str(e)}")
-            return []
-
     def run(self, query: str, start_date: str, end_date: str) -> List[Dict]:
         """Run the scraper for all sources."""
         all_articles = []
         
         self.logger.info(
-            f"Starting Google News scraper for query '{query}' "
+            f"Starting Google Search scraper for query '{query}' "
             f"from {start_date} to {end_date}"
         )
         
@@ -598,7 +698,7 @@ class GoogleNewsScraper:
         """Save articles to a JSON file."""
         if not filename:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"google_news_articles_{timestamp}.json"
+            filename = f"google_search_articles_{timestamp}.json"
         
         filepath = os.path.join(self.data_dir, filename)
         
@@ -612,7 +712,7 @@ class GoogleNewsScraper:
         """Save articles to a CSV file."""
         if not filename:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"google_news_articles_{timestamp}.csv"
+            filename = f"google_search_articles_{timestamp}.csv"
         
         filepath = os.path.join(self.data_dir, filename)
         
