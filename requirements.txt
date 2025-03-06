@@ -13,6 +13,7 @@ readability-lxml>=0.8.1
 PyPDF2>=3.0.0
 selenium>=4.16.0
 webdriver-manager>=4.0.1
+undetected-chromedriver>=3.5.0  # For bypassing detection
 
 # Deep Learning & NLP
 torch>=2.1.0
