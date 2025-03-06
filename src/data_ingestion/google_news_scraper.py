@@ -351,65 +351,108 @@ class GoogleNewsScraper:
             logger.error(f"Error handling captcha: {str(e)}")
             return False
 
+    def _wait_and_find_element(self, by, value, timeout=20, retries=3):
+        """Wait for and find an element with retries and dynamic waits."""
+        for attempt in range(retries):
+            try:
+                wait = WebDriverWait(self.driver, timeout, poll_frequency=1)
+                element = wait.until(EC.presence_of_element_located((by, value)))
+                # Additional wait for interactability
+                wait.until(EC.element_to_be_clickable((by, value)))
+                return element
+            except Exception as e:
+                if attempt < retries - 1:
+                    logger.info(f"Retry {attempt + 1}: Element {value} not ready, waiting...")
+                    # Exponential backoff
+                    time.sleep((attempt + 1) * random.uniform(2, 4))
+                    # Refresh page on last retry
+                    if attempt == retries - 2:
+                        self.driver.refresh()
+                else:
+                    raise
+
     def _search_source(self, source: str, query: str, start_date: str, end_date: str):
         """Search for articles from a specific source within date range."""
         try:
             logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
             
-            # Enhanced wait strategy
-            wait = WebDriverWait(self.driver, 20, poll_frequency=1)
-            
-            # Navigate to Google News
+            # Navigate to Google News with retry
             self._safe_get("https://news.google.com")
-            time.sleep(random.uniform(2, 4))
-            
-            # Wait for and click search button
-            search_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "gb_Ue")))
-            self._human_click(search_button)
-            
-            # Wait for search box and type query
-            search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
-            self._human_type(search_box, f"site:{source} {query}")
-            search_box.send_keys(Keys.RETURN)
-            
-            # Wait for Tools button and click
-            tools_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Tools')]")))
-            self._human_click(tools_button)
-            time.sleep(random.uniform(1, 2))
-            
-            # Wait for and click date filter
-            date_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'hdtb-mn-hd') and contains(., 'Any time')]")))
-            self._human_click(date_button)
-            time.sleep(random.uniform(1, 2))
-            
-            # Wait for and click custom range
-            custom_range = wait.until(EC.element_to_be_clickable((By.XPATH, "//g-menu-item[contains(., 'Custom range...')]")))
-            self._human_click(custom_range)
-            time.sleep(random.uniform(1, 2))
-            
-            # Enhanced date input handling
-            start_input = wait.until(EC.presence_of_element_located((By.ID, "OouJcb")))
-            end_input = wait.until(EC.presence_of_element_located((By.ID, "rzG2be")))
-            
-            # Clear existing dates
-            start_input.clear()
-            time.sleep(random.uniform(0.5, 1))
-            end_input.clear()
-            time.sleep(random.uniform(0.5, 1))
-            
-            # Input dates
-            self._human_type(start_input, start_date)
-            time.sleep(random.uniform(0.5, 1))
-            self._human_type(end_input, end_date)
-            
-            # Click go button
-            go_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//g-button[contains(., 'Go')]")))
-            self._human_click(go_button)
-            
-            # Wait for results to load
             time.sleep(random.uniform(3, 5))
             
-            # Extract and return results
+            # Try multiple search button selectors
+            search_selectors = [
+                (By.CLASS_NAME, "gb_Ue"),
+                (By.XPATH, "//button[@aria-label='Search']"),
+                (By.CSS_SELECTOR, "button[aria-label='Search']")
+            ]
+            
+            search_button = None
+            for by, selector in search_selectors:
+                try:
+                    search_button = self._wait_and_find_element(by, selector)
+                    break
+                except:
+                    continue
+            
+            if not search_button:
+                raise Exception("Could not find search button")
+            
+            self._human_click(search_button)
+            
+            # Enhanced search box handling
+            search_box = self._wait_and_find_element(By.NAME, "q")
+            self._human_type(search_box, f"site:{source} {query}")
+            search_box.send_keys(Keys.RETURN)
+            time.sleep(random.uniform(2, 4))
+            
+            # Enhanced tools button handling with multiple attempts
+            tools_button = self._wait_and_find_element(
+                By.XPATH,
+                "//div[contains(text(), 'Tools') or contains(@aria-label, 'Tools')]"
+            )
+            self._human_click(tools_button)
+            time.sleep(random.uniform(2, 3))
+            
+            # Enhanced date filter handling
+            date_button = self._wait_and_find_element(
+                By.XPATH,
+                "//div[contains(@class, 'hdtb-mn-hd') and contains(., 'Any time')]"
+            )
+            self._human_click(date_button)
+            time.sleep(random.uniform(2, 3))
+            
+            # Wait for custom range with retry
+            custom_range = self._wait_and_find_element(
+                By.XPATH,
+                "//g-menu-item[contains(., 'Custom range...')]"
+            )
+            self._human_click(custom_range)
+            time.sleep(random.uniform(2, 3))
+            
+            # Enhanced date input handling with retries
+            start_input = self._wait_and_find_element(By.ID, "OouJcb")
+            end_input = self._wait_and_find_element(By.ID, "rzG2be")
+            
+            for input_field in [start_input, end_input]:
+                input_field.clear()
+                time.sleep(random.uniform(1, 2))
+            
+            self._human_type(start_input, start_date)
+            time.sleep(random.uniform(1, 2))
+            self._human_type(end_input, end_date)
+            time.sleep(random.uniform(1, 2))
+            
+            # Click go button with retry
+            go_button = self._wait_and_find_element(
+                By.XPATH,
+                "//g-button[contains(., 'Go')]"
+            )
+            self._human_click(go_button)
+            
+            # Extended wait for results
+            time.sleep(random.uniform(4, 6))
+            
             return self._extract_articles()
             
         except Exception as e:
