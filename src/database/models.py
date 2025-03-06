@@ -54,6 +54,40 @@ class ArticleDB:
         CREATE INDEX IF NOT EXISTS idx_iaea_url ON iaea_articles(url);
         CREATE INDEX IF NOT EXISTS idx_iaea_source ON iaea_articles(source);
         CREATE INDEX IF NOT EXISTS idx_iaea_date ON iaea_articles(published_date);
+        
+        -- Reuters articles table
+        CREATE TABLE IF NOT EXISTS reuters_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            published_date TEXT,
+            url TEXT UNIQUE NOT NULL,
+            source TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            query TEXT,
+            search_date TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_reuters_url ON reuters_articles(url);
+        CREATE INDEX IF NOT EXISTS idx_reuters_source ON reuters_articles(source);
+        CREATE INDEX IF NOT EXISTS idx_reuters_date ON reuters_articles(published_date);
+        CREATE INDEX IF NOT EXISTS idx_reuters_query ON reuters_articles(query);
+        
+        -- Financial Times articles table
+        CREATE TABLE IF NOT EXISTS ft_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            published_date TEXT,
+            url TEXT UNIQUE NOT NULL,
+            source TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            query TEXT,
+            search_date TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ft_url ON ft_articles(url);
+        CREATE INDEX IF NOT EXISTS idx_ft_source ON ft_articles(source);
+        CREATE INDEX IF NOT EXISTS idx_ft_date ON ft_articles(published_date);
+        CREATE INDEX IF NOT EXISTS idx_ft_query ON ft_articles(query);
         """
         
         try:
@@ -83,6 +117,14 @@ class ArticleDB:
     def insert_iaea_article(self, article: Dict) -> bool:
         """Insert a new IAEA article."""
         return self._insert_article(article, 'iaea_articles')
+    
+    def insert_reuters_article(self, article: Dict) -> bool:
+        """Insert a new Reuters article."""
+        return self._insert_article(article, 'reuters_articles')
+    
+    def insert_ft_article(self, article: Dict) -> bool:
+        """Insert a new Financial Times article."""
+        return self._insert_article(article, 'ft_articles')
     
     def _insert_article(self, article: Dict, table: str) -> bool:
         """Insert an article into specified table."""
@@ -115,16 +157,32 @@ class ArticleDB:
         """Get IAEA articles."""
         return self._get_articles('iaea_articles', limit)
     
-    def _get_articles(self, table: str, limit: Optional[int] = None) -> List[Dict]:
+    def get_reuters_articles(self, limit: Optional[int] = None, query: Optional[str] = None) -> List[Dict]:
+        """Get Reuters articles."""
+        return self._get_articles('reuters_articles', limit, query)
+    
+    def get_ft_articles(self, limit: Optional[int] = None, query: Optional[str] = None) -> List[Dict]:
+        """Get Financial Times articles."""
+        return self._get_articles('ft_articles', limit, query)
+    
+    def _get_articles(self, table: str, limit: Optional[int] = None, query: Optional[str] = None) -> List[Dict]:
         """Get articles from specified table."""
-        select_sql = f"SELECT * FROM {table} ORDER BY published_date DESC"
+        select_sql = f"SELECT * FROM {table}"
+        params = []
+        
+        if query:
+            select_sql += " WHERE query = ?"
+            params.append(query)
+        
+        select_sql += " ORDER BY published_date DESC"
+        
         if limit:
             select_sql += f" LIMIT {limit}"
         
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(select_sql)
+                cursor.execute(select_sql, params)
                 rows = cursor.fetchall()
                 return [self._row_to_dict(row) for row in rows]
         except sqlite3.Error as e:
@@ -139,7 +197,17 @@ class ArticleDB:
             return article
         
         # Try IAEA if not found in Bloomberg
-        return self._get_article_by_url(url, 'iaea_articles')
+        article = self._get_article_by_url(url, 'iaea_articles')
+        if article:
+            return article
+        
+        # Try Reuters if not found in IAEA
+        article = self._get_article_by_url(url, 'reuters_articles')
+        if article:
+            return article
+        
+        # Try Financial Times if not found in Reuters
+        return self._get_article_by_url(url, 'ft_articles')
     
     def _get_article_by_url(self, url: str, table: str) -> Optional[Dict]:
         """Get article by URL from specified table."""
@@ -170,13 +238,21 @@ class ArticleDB:
                 cursor.execute("SELECT COUNT(*) FROM iaea_articles")
                 counts['IAEA'] = cursor.fetchone()[0]
                 
+                # Get Reuters count
+                cursor.execute("SELECT COUNT(*) FROM reuters_articles")
+                counts['Reuters'] = cursor.fetchone()[0]
+                
+                # Get Financial Times count
+                cursor.execute("SELECT COUNT(*) FROM ft_articles")
+                counts['Financial Times'] = cursor.fetchone()[0]
+                
                 # Add total
-                counts['Total'] = counts['Bloomberg'] + counts['IAEA']
+                counts['Total'] = counts['Bloomberg'] + counts['IAEA'] + counts['Reuters'] + counts['Financial Times']
                 
                 return counts
         except sqlite3.Error as e:
             logger.error(f"Error getting article counts: {str(e)}")
-            return {'Bloomberg': 0, 'IAEA': 0, 'Total': 0}
+            return {'Bloomberg': 0, 'IAEA': 0, 'Reuters': 0, 'Financial Times': 0, 'Total': 0}
     
     def get_source_statistics(self) -> Dict[str, Dict[str, int]]:
         """Get detailed statistics for each source."""
@@ -185,8 +261,8 @@ class ArticleDB:
                 cursor = conn.cursor()
                 stats = {}
                 
-                for table in ['bloomberg_articles', 'iaea_articles']:
-                    source = 'Bloomberg' if table == 'bloomberg_articles' else 'IAEA'
+                for table in ['bloomberg_articles', 'iaea_articles', 'reuters_articles', 'ft_articles']:
+                    source = 'Bloomberg' if table == 'bloomberg_articles' else 'IAEA' if table == 'iaea_articles' else 'Reuters' if table == 'reuters_articles' else 'Financial Times'
                     
                     # Get total articles
                     cursor.execute(f"SELECT COUNT(*) FROM {table}")
