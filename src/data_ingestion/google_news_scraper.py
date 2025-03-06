@@ -13,7 +13,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Set, Tuple
-from urllib.parse import urljoin, urlparse, quote_plus
+from urllib.parse import urljoin, urlparse, quote_plus, quote
 import concurrent.futures
 
 from selenium import webdriver
