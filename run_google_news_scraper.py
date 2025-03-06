@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Script to run the Google News scraper."""
+"""Script to run the Google Search scraper."""
 import argparse
 import logging
 from datetime import datetime
-from src.data_ingestion.google_news_scraper import GoogleNewsScraper
+from src.data_ingestion.google_news_scraper import GoogleSearchScraper
 
 # Configure logging
 logging.basicConfig(
@@ -11,23 +11,23 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('google_news_scraping.log')
+        logging.FileHandler('google_search_scraping.log')
     ]
 )
 logger = logging.getLogger(__name__)
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Google News Scraper')
+    parser = argparse.ArgumentParser(description='Run Google Search scraper for news articles')
     
     parser.add_argument('--query', type=str, required=True,
                         help='Search query')
     
-    parser.add_argument('--start-date', type=str, default='2020-01-01',
-                        help='Start date in YYYY-MM-DD format (default: 2020-01-01)')
+    parser.add_argument('--start-date', type=str, required=True,
+                        help='Start date in YYYY-MM-DD format')
     
-    parser.add_argument('--end-date', type=str, default='2025-03-01',
-                        help='End date in YYYY-MM-DD format (default: 2025-03-01)')
+    parser.add_argument('--end-date', type=str, required=True,
+                        help='End date in YYYY-MM-DD format')
     
     parser.add_argument('--no-headless', action='store_true',
                         help='Run browser in visible mode (default: run in headless mode)')
@@ -35,22 +35,23 @@ def parse_args():
     parser.add_argument('--workers', type=int, default=3,
                         help='Number of parallel workers (default: 3)')
     
-    parser.add_argument('--output-dir', type=str, default='data/google_news',
-                        help='Directory to store scraped data (default: data/google_news)')
+    parser.add_argument('--output-dir', type=str, default='data/google_search',
+                        help='Directory to store scraped data (default: data/google_search)')
     
     return parser.parse_args()
 
 def main():
-    """Run the Google News scraper."""
+    """Run the Google Search scraper."""
     args = parse_args()
     
-    logger.info(f"Starting Google News scraper with query: '{args.query}'")
+    logger.info(f"Starting Google Search scraper with query: '{args.query}'")
     logger.info(f"Date range: {args.start_date} to {args.end_date}")
     
     try:
         # Initialize scraper
-        scraper = GoogleNewsScraper(
+        scraper = GoogleSearchScraper(
             headless=not args.no_headless,  # Invert the no-headless flag
+            use_proxy=False,
             max_workers=args.workers,
             data_dir=args.output_dir
         )
@@ -61,6 +62,11 @@ def main():
             start_date=args.start_date,
             end_date=args.end_date
         )
+        
+        # Save results
+        if articles:
+            scraper.save_articles(articles)
+            scraper.save_to_csv(articles)
         
         # Print summary
         logger.info(f"Scraping complete! Found {len(articles)} articles")
@@ -78,7 +84,7 @@ def main():
                 logger.info("-" * 80)
         
     except Exception as e:
-        logger.error(f"Error running Google News scraper: {str(e)}", exc_info=True)
+        logger.error(f"Error running Google Search scraper: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     main()
