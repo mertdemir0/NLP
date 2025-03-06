@@ -371,6 +371,62 @@ class GoogleNewsScraper:
                 else:
                     raise
 
+    def _safe_get(self, url, max_retries=3):
+        """Safely navigate to a URL with retries."""
+        for attempt in range(max_retries):
+            try:
+                self.driver.get(url)
+                # Wait for page load
+                WebDriverWait(self.driver, 20).until(
+                    lambda driver: driver.execute_script('return document.readyState') == 'complete'
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Error navigating to {url}: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep((attempt + 1) * random.uniform(2, 4))
+                else:
+                    raise
+
+    def _human_click(self, element):
+        """Simulate human-like clicking behavior."""
+        try:
+            # Move to element with random offset
+            action = ActionChains(self.driver)
+            action.move_to_element_with_offset(
+                element,
+                random.randint(-3, 3),
+                random.randint(-3, 3)
+            )
+            action.pause(random.uniform(0.1, 0.3))
+            action.click()
+            action.perform()
+            return True
+        except Exception as e:
+            logger.error(f"Error clicking element: {str(e)}")
+            # Fallback to regular click
+            element.click()
+
+    def _human_type(self, element, text):
+        """Simulate human-like typing behavior."""
+        try:
+            element.click()
+            for char in text:
+                element.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.15))
+            return True
+        except Exception as e:
+            logger.error(f"Error typing text: {str(e)}")
+            # Fallback to regular send_keys
+            element.send_keys(text)
+
+    def _get_random_delay(self):
+        """Get a random delay between actions."""
+        # 70% chance of short delay, 30% chance of longer delay
+        if random.random() < 0.7:
+            return random.uniform(2, 5)
+        return random.uniform(5, 8)
+
     def _search_source(self, source: str, query: str, start_date: str, end_date: str):
         """Search for articles from a specific source within date range."""
         try:
