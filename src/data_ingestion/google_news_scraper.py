@@ -265,43 +265,92 @@ class GoogleNewsScraper:
             captcha_selectors = [
                 "//iframe[contains(@src, 'recaptcha')]",
                 "//div[contains(@class, 'g-recaptcha')]",
-                "//form[@action='/sorry']"
+                "//form[@action='/sorry']",
+                "//div[contains(text(), 'unusual traffic')]",
+                "//div[contains(text(), 'verify you are human')]"
             ]
             
             for selector in captcha_selectors:
                 if driver.find_elements(By.XPATH, selector):
                     logger.warning("Captcha detected! Implementing bypass strategy...")
                     
-                    # Wait for a longer period
-                    time.sleep(10 + self._get_random_delay())
+                    # Save cookies before handling captcha
+                    cookies = driver.get_cookies()
+                    
+                    # Clear cookies and cache
+                    driver.delete_all_cookies()
+                    driver.execute_script("window.localStorage.clear();")
+                    driver.execute_script("window.sessionStorage.clear();")
+                    
+                    # Wait for a longer period with random delay
+                    time.sleep(random.uniform(15, 30))
+                    
+                    # Restore original cookies
+                    for cookie in cookies:
+                        try:
+                            driver.add_cookie(cookie)
+                        except:
+                            pass
                     
                     # Simulate human-like behavior
                     actions = ActionChains(driver)
-                    actions.move_by_offset(random.randint(0, 100), random.randint(0, 100))
-                    actions.move_by_offset(0, 0)
+                    
+                    # Random mouse movements
+                    for _ in range(5):
+                        x_offset = random.randint(-100, 100)
+                        y_offset = random.randint(-100, 100)
+                        actions.move_by_offset(x_offset, y_offset)
+                        actions.pause(random.uniform(0.1, 0.3))
+                    
+                    # Move to center
+                    actions.move_to_element(driver.find_element(By.TAG_NAME, "body"))
+                    actions.pause(random.uniform(0.5, 1.0))
+                    
+                    # Perform actions
                     actions.perform()
                     
                     # Try to switch to recaptcha frame
                     frames = driver.find_elements(By.TAG_NAME, "iframe")
                     for frame in frames:
-                        if "recaptcha" in frame.get_attribute("src").lower():
-                            driver.switch_to.frame(frame)
-                            checkbox = WebDriverWait(driver, 10).until(
-                                EC.presence_of_element_located((By.ID, "recaptcha-anchor"))
-                            )
-                            checkbox.click()
-                            time.sleep(2)
-                            driver.switch_to.default_content()
-                            return True
+                        try:
+                            if "recaptcha" in frame.get_attribute("src").lower():
+                                driver.switch_to.frame(frame)
+                                
+                                # Wait for checkbox
+                                checkbox = WebDriverWait(driver, 10).until(
+                                    EC.presence_of_element_located((By.ID, "recaptcha-anchor"))
+                                )
+                                
+                                # Move to checkbox with random approach
+                                actions = ActionChains(driver)
+                                actions.move_by_offset(random.randint(-50, 50), random.randint(-50, 50))
+                                actions.pause(random.uniform(0.1, 0.3))
+                                actions.move_to_element(checkbox)
+                                actions.pause(random.uniform(0.2, 0.5))
+                                actions.click()
+                                actions.perform()
+                                
+                                time.sleep(random.uniform(2, 4))
+                                driver.switch_to.default_content()
+                                
+                                # Check if captcha was solved
+                                time.sleep(5)
+                                if not any(driver.find_elements(By.XPATH, sel) for sel in captcha_selectors):
+                                    return True
+                        except:
+                            continue
                     
+                    # If we get here, we couldn't solve the captcha
+                    logger.warning("Failed to solve captcha automatically")
                     return False
             
+            # No captcha detected
             return True
             
         except Exception as e:
             logger.error(f"Error handling captcha: {str(e)}")
             return False
-    
+
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str) -> List[Dict]:
         """Search Google News for articles from a specific source within date range."""
         logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
@@ -316,21 +365,38 @@ class GoogleNewsScraper:
                 # Build search URL
                 url = self._build_search_url(query, start_date, end_date, source)
                 
-                # Initialize driver
+                # Initialize driver with new profile each time
                 driver = self._setup_driver()
                 
-                # Add cookies to appear more like a real browser
+                # First visit Google homepage and wait
                 driver.get("https://www.google.com")
-                time.sleep(self._get_random_delay())
+                time.sleep(random.uniform(3, 5))
                 
-                # Now navigate to the search URL
+                # Perform some random searches first
+                random_searches = [
+                    "weather today",
+                    "latest news",
+                    "current events"
+                ]
+                for search in random_searches[:random.randint(1, 2)]:
+                    search_box = driver.find_element(By.NAME, "q")
+                    search_box.clear()
+                    # Type like a human with random delays
+                    for char in search:
+                        search_box.send_keys(char)
+                        time.sleep(random.uniform(0.1, 0.3))
+                    search_box.send_keys(Keys.RETURN)
+                    time.sleep(random.uniform(2, 4))
+                
+                # Now navigate to the actual search URL
                 driver.get(url)
-                time.sleep(self._get_random_delay())
+                time.sleep(random.uniform(3, 5))
                 
                 # Handle captcha if present
                 if not self._handle_captcha(driver):
                     logger.warning("Captcha detected, retrying with new session...")
                     retry_count += 1
+                    time.sleep(random.uniform(30, 60))  # Longer wait before retry
                     continue
                 
                 # Wait for search results with a longer timeout
@@ -341,9 +407,10 @@ class GoogleNewsScraper:
                 except TimeoutException:
                     logger.warning("No results found, might be blocked. Retrying...")
                     retry_count += 1
+                    time.sleep(random.uniform(20, 40))  # Longer wait before retry
                     continue
                 
-                # Add some random mouse movements
+                # Add some random mouse movements and scrolling
                 actions = ActionChains(driver)
                 for _ in range(3):
                     actions.move_by_offset(random.randint(-100, 100), random.randint(-100, 100))
@@ -367,6 +434,7 @@ class GoogleNewsScraper:
                 if not results:
                     logger.warning("No results found in the page, might need to retry")
                     retry_count += 1
+                    time.sleep(random.uniform(15, 30))  # Longer wait before retry
                     continue
                 
                 for result in results:
@@ -385,7 +453,7 @@ class GoogleNewsScraper:
                 retry_count += 1
                 if retry_count < max_retries:
                     logger.info(f"Retrying... (attempt {retry_count + 1} of {max_retries})")
-                    time.sleep(random.uniform(5, 10))  # Add longer delay between retries
+                    time.sleep(random.uniform(20, 40))  # Longer delay between retries
                 
             finally:
                 if driver:
@@ -395,7 +463,7 @@ class GoogleNewsScraper:
                         pass
         
         return articles
-    
+
     def search_all_sources(self, query: str, start_date: str, end_date: str) -> List[Dict]:
         """Search all target sources for articles within the date range."""
         all_articles = []
