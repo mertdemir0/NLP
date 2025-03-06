@@ -529,99 +529,13 @@ class GoogleNewsScraper:
 
     def _search_articles(self, query: str, start_date: str, end_date: str, source: str = None) -> List[Dict]:
         """Search Google News for articles from a specific source within date range."""
-        self.logger.info(f"Searching {source} articles for '{query}' from {start_date} to {end_date}")
-        
         articles = []
         max_retries = 3
         retry_count = 0
         
         while retry_count < max_retries:
-            driver = None
             try:
-                # Build search URL
-                url = self._build_search_url(query, start_date, end_date, source)
-                
-                # Initialize driver with new profile each time
-                driver = self.driver
-                
-                # First visit Google homepage and wait
-                driver.get("https://www.google.com")
-                time.sleep(random.uniform(3, 5))
-                
-                # Perform some random searches first
-                random_searches = [
-                    "weather today",
-                    "latest news",
-                    "current events"
-                ]
-                for search in random_searches[:random.randint(1, 2)]:
-                    search_box = driver.find_element(By.NAME, "q")
-                    search_box.clear()
-                    # Type like a human with random delays
-                    for char in search:
-                        search_box.send_keys(char)
-                        time.sleep(random.uniform(0.1, 0.3))
-                    search_box.send_keys(Keys.RETURN)
-                    time.sleep(random.uniform(2, 4))
-                
-                # Now navigate to the actual search URL
-                driver.get(url)
-                time.sleep(random.uniform(3, 5))
-                
-                # Handle captcha if present
-                if not self._handle_captcha(driver):
-                    self.logger.warning("Captcha detected, retrying with new session...")
-                    retry_count += 1
-                    time.sleep(random.uniform(30, 60))  # Longer wait before retry
-                    continue
-                
-                # Wait for search results with a longer timeout
-                try:
-                    WebDriverWait(driver, 20).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "g"))
-                    )
-                except TimeoutException:
-                    self.logger.warning("No results found, might be blocked. Retrying...")
-                    retry_count += 1
-                    time.sleep(random.uniform(20, 40))  # Longer wait before retry
-                    continue
-                
-                # Add some random mouse movements and scrolling
-                actions = ActionChains(driver)
-                for _ in range(3):
-                    actions.move_by_offset(random.randint(-100, 100), random.randint(-100, 100))
-                    actions.pause(random.uniform(0.1, 0.3))
-                actions.perform()
-                
-                # Scroll slowly to load all results
-                screen_heights = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);")
-                current_position = 0
-                step = random.randint(300, 500)  # Random step size
-                
-                while current_position < screen_heights:
-                    current_position = min(current_position + step, screen_heights)
-                    driver.execute_script(f"window.scrollTo(0, {current_position});")
-                    time.sleep(random.uniform(0.5, 1.0))  # Random delay while scrolling
-                
-                # Parse results
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
-                results = soup.find_all(class_="g")
-                
-                if not results:
-                    self.logger.warning("No results found in the page, might need to retry")
-                    retry_count += 1
-                    time.sleep(random.uniform(15, 30))  # Longer wait before retry
-                    continue
-                
-                for result in results:
-                    article = self._extract_article_info(result)
-                    if article and article['url'] not in self.processed_urls:
-                        articles.append(article)
-                        self.processed_urls.add(article['url'])
-                
-                self.logger.info(f"Found {len(articles)} articles from {source}")
-                
-                # If we got here successfully, break the retry loop
+                articles = self._search_source(source, query, start_date, end_date)
                 break
                 
             except Exception as e:
@@ -630,19 +544,42 @@ class GoogleNewsScraper:
                 if retry_count < max_retries:
                     self.logger.info(f"Retrying... (attempt {retry_count + 1} of {max_retries})")
                     time.sleep(random.uniform(20, 40))  # Longer delay between retries
-                
-            finally:
-                if driver:
-                    try:
-                        driver.quit()
-                    except:
-                        pass
         
         return articles
 
-    def search_all_sources(self, query: str, start_date: str, end_date: str) -> List[Dict]:
-        """Search all target sources for articles within the date range."""
+    def _extract_articles(self):
+        """Extract articles from the current page."""
+        try:
+            # Parse results
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            results = soup.find_all(class_="g")
+            
+            if not results:
+                self.logger.warning("No results found in the page, might need to retry")
+                return []
+            
+            articles = []
+            for result in results:
+                article = self._extract_article_info(result)
+                if article and article['url'] not in self.processed_urls:
+                    articles.append(article)
+                    self.processed_urls.add(article['url'])
+            
+            self.logger.info(f"Found {len(articles)} articles")
+            return articles
+        
+        except Exception as e:
+            self.logger.error(f"Error extracting articles: {str(e)}")
+            return []
+
+    def run(self, query: str, start_date: str, end_date: str) -> List[Dict]:
+        """Run the scraper for all sources."""
         all_articles = []
+        
+        self.logger.info(
+            f"Starting Google News scraper for query '{query}' "
+            f"from {start_date} to {end_date}"
+        )
         
         # Generate weekly date ranges
         date_ranges = self._generate_weekly_ranges(start_date, end_date)
@@ -652,16 +589,16 @@ class GoogleNewsScraper:
         for source_domain, source_name in self.target_sources.items():
             for week_start, week_end in date_ranges:
                 try:
-                    # Add random delay between weeks
-                    time.sleep(self._get_random_delay())
-                    
-                    articles = self._search_source(source_domain, query, week_start, week_end)
+                    articles = self._search_articles(query, week_start, week_end, source_domain)
                     all_articles.extend(articles)
                     
                     self.logger.info(
                         f"Completed {source_name} search for week {week_start} to {week_end}: "
                         f"{len(articles)} articles found"
                     )
+                    
+                    # Add random delay between weeks
+                    time.sleep(self._get_random_delay())
                     
                 except Exception as e:
                     self.logger.error(
@@ -671,7 +608,7 @@ class GoogleNewsScraper:
         
         self.logger.info(f"Total articles found across all sources: {len(all_articles)}")
         return all_articles
-    
+
     def save_articles(self, articles: List[Dict], filename: str = None) -> str:
         """Save articles to a JSON file."""
         if not filename:
@@ -700,20 +637,3 @@ class GoogleNewsScraper:
         
         self.logger.info(f"Saved {len(articles)} articles to {filepath}")
         return filepath
-    
-    def run(self, query: str, start_date: str, end_date: str) -> List[Dict]:
-        """Run the Google News scraper for the given query and date range."""
-        self.logger.info(
-            f"Starting Google News scraper for query '{query}' "
-            f"from {start_date} to {end_date}"
-        )
-        
-        # Search all sources with weekly ranges
-        articles = self.search_all_sources(query, start_date, end_date)
-        
-        # Save results
-        if articles:
-            self.save_articles(articles)
-            self.save_to_csv(articles)
-        
-        return articles
