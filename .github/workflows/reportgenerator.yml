@@ -1,6 +1,9 @@
 name: Generate Coverage Report
 
 on:
+
+  workflow_call:
+
   schedule:
     - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
   workflow_call:  # Keep this to allow other workflows to call it
@@ -11,9 +14,13 @@ env:
   HISTORY_RETENTION_DAYS: 90  # Keep history for 90 days
   COVERAGE_DATA_PATH: reports/coverage_data  # Path for structured coverage data
 
+
 jobs:
   generate-report:
     runs-on: ubuntu-latest
+
+    steps:
+
     permissions:
       contents: write  # Needed for pushing to the repository
     steps:
@@ -141,3 +148,4 @@ jobs:
       - name: Publish coverage in build summary
         run: cat coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
         shell: bash
+
