@@ -1,6 +1,8 @@
 name: Run Tests and Generate Coverage Report
 
 on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
   push:
     branches: [ main ]
   pull_request:
