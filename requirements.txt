@@ -30,6 +30,7 @@ kafka-python>=2.0.2
 pymongo>=4.6.0
 dask>=2023.12.0
 pyarrow>=14.0.1
+blpapi>=3.19.1  # Bloomberg API for database integration
 
 # ML Metrics & Validation
 scikit-learn>=1.0.0
