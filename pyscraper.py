@@ -74,7 +74,13 @@ def clean_html_summary(html_text: Optional[str]) -> Optional[str]:
 def extract_bloomberg_url(google_link: str) -> Optional[str]:
     """Extract original Bloomberg URL from Google News link"""
     try:
-        # Parse the Google News URL
+        # For RSS feed links, we need to decode them first
+        if 'news.google.com/rss/articles/' in google_link:
+            response = requests.get(google_link, allow_redirects=True)
+            if response.status_code == 200:
+                google_link = response.url
+
+        # Now parse the Google News URL
         parsed = urlparse(google_link)
         query_params = parse_qs(parsed.query)
         
@@ -111,8 +117,8 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
         gn = GoogleNews(lang='en')
         logging.info(f"Searching for nuclear news from {source} between {start_date} and {end_date}")
         
-        # Construct query with source restriction
-        query = f"nuclear site:{source}"
+        # Construct query with source restriction and intitle:nuclear
+        query = f"intitle:nuclear site:{source}"
         
         # Search with date range
         search_results = gn.search(query, from_=start_date, to_=end_date)
@@ -133,7 +139,11 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
                 # Get Bloomberg URL
                 bloomberg_url = extract_bloomberg_url(entry.link)
                 if not bloomberg_url:
+                    logging.warning(f"Could not extract Bloomberg URL from: {entry.link}")
                     continue
+                
+                logging.info(f"Processing article: {entry.title}")
+                logging.info(f"Bloomberg URL: {bloomberg_url}")
                 
                 # Clean the summary
                 html_summary = entry.summary if hasattr(entry, 'summary') else None
@@ -155,6 +165,7 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
                     html_summary
                 ))
                 total_added += 1
+                logging.info(f"Added article to database: {entry.title}")
                 
             except (AttributeError, TypeError) as e:
                 logging.error(f"Error processing entry: {str(e)}")
