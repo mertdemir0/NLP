@@ -1,9 +1,9 @@
 name: Coverage Report Generator
 
 on:
+  workflow_call: {}  # Makes the workflow reusable
   schedule:
-    - cron: '0 0 * * *'  # Runs at 00:00 UTC daily
-  workflow_call:  # Makes the workflow reusable
+    - cron: "0 0 * * *"  # Runs at 00:00 UTC daily
 
 permissions:
   contents: write  # Needed to push to main branch
