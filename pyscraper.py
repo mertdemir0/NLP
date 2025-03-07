@@ -76,9 +76,19 @@ def extract_bloomberg_url(google_link: str) -> Optional[str]:
     try:
         # For RSS feed links, we need to decode them first
         if 'news.google.com/rss/articles/' in google_link:
-            response = requests.get(google_link, allow_redirects=True)
-            if response.status_code == 200:
-                google_link = response.url
+            # Configure session to disable HTTP/3
+            session = requests.Session()
+            session.mount('https://', requests.adapters.HTTPAdapter(max_retries=1))
+            
+            try:
+                response = session.get(google_link, allow_redirects=True, timeout=5)
+                if response.status_code == 200:
+                    google_link = response.url
+            except requests.exceptions.RequestException as e:
+                logging.debug(f"Failed to follow redirect: {str(e)}")
+                return None
+            finally:
+                session.close()
 
         # Now parse the Google News URL
         parsed = urlparse(google_link)
@@ -99,7 +109,7 @@ def extract_bloomberg_url(google_link: str) -> Optional[str]:
             
         return None
     except Exception as e:
-        logging.error(f"Error extracting Bloomberg URL: {str(e)}")
+        logging.debug(f"Error extracting Bloomberg URL: {str(e)}")
         return None
 
 def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, end_date: str, source: str = 'bloomberg.com') -> Tuple[int, int]:
@@ -125,6 +135,10 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
         
         # Extract relevant information
         entries = search_results.get('entries', [])
+        if not entries:
+            logging.info("No entries found")
+            return 0, 0
+            
         logging.info(f"Found {len(entries)} entries")
         
         cursor = conn.cursor()
@@ -139,11 +153,8 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
                 # Get Bloomberg URL
                 bloomberg_url = extract_bloomberg_url(entry.link)
                 if not bloomberg_url:
-                    logging.warning(f"Could not extract Bloomberg URL from: {entry.link}")
+                    logging.debug(f"Could not extract Bloomberg URL from: {entry.link}")
                     continue
-                
-                logging.info(f"Processing article: {entry.title}")
-                logging.info(f"Bloomberg URL: {bloomberg_url}")
                 
                 # Clean the summary
                 html_summary = entry.summary if hasattr(entry, 'summary') else None
@@ -165,7 +176,7 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
                     html_summary
                 ))
                 total_added += 1
-                logging.info(f"Added article to database: {entry.title}")
+                logging.info(f"Added: {entry.title} -> {bloomberg_url}")
                 
             except (AttributeError, TypeError) as e:
                 logging.error(f"Error processing entry: {str(e)}")
@@ -174,6 +185,7 @@ def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, en
             total_processed += 1
         
         conn.commit()
+        logging.info(f"Successfully processed {total_processed} entries, added {total_added} new articles")
         return total_processed, total_added
         
     except Exception as e:
