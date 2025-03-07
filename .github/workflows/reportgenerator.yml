@@ -2,8 +2,11 @@ name: Coverage Report Generator
 
 on:
   workflow_call: {}  # Makes the workflow reusable
-  schedule:
-    - cron: "0 0 * * *"  # Runs at 00:00 UTC daily
+  push:
+    branches:
+      - main  # Runs when code is pushed to main branch
+    paths:
+      - 'src/database/**'  # Only trigger when database files change
 
 permissions:
   contents: write  # Needed to push to main branch
