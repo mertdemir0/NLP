@@ -6,7 +6,7 @@ import os
 # Add the current directory to the path to import the GoogleSearchScraper
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from google_search_scraper import GoogleSearchScraper
-
+# TODO: add ollama integration
 async def main():
     # Create argument parser
     parser = argparse.ArgumentParser(description="Google Search Scraper CLI")
