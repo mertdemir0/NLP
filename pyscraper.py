@@ -1,4 +1,4 @@
-from pygooglenews import GoogleNews
+from googlesearch import search
 import json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -9,6 +9,7 @@ import re
 from bs4 import BeautifulSoup
 import logging
 from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 # Set up logging
 logging.basicConfig(
@@ -25,7 +26,7 @@ def init_database() -> sqlite3.Connection:
     conn = sqlite3.connect('nuclear_news.db')
     c = conn.cursor()
     
-    # Raw table to store all fetched articles
+    # Keep existing tables for Google News data
     c.execute('''CREATE TABLE IF NOT EXISTS raw_articles
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   title TEXT,
@@ -36,7 +37,6 @@ def init_database() -> sqlite3.Connection:
                   html_summary TEXT,
                   fetch_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
-    # Clean table with unique Google links
     c.execute('''CREATE TABLE IF NOT EXISTS clean_articles
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   title TEXT,
@@ -48,206 +48,158 @@ def init_database() -> sqlite3.Connection:
                   processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(raw_id) REFERENCES raw_articles(id))''')
     
+    # New table for Google Search results
+    c.execute('''CREATE TABLE IF NOT EXISTS google_search_articles
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  url TEXT UNIQUE,
+                  title TEXT,
+                  fetch_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
     # Create indices for better performance
     c.execute('CREATE INDEX IF NOT EXISTS idx_google_link ON raw_articles(google_link)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_published_parsed ON clean_articles(published_parsed)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_search_url ON google_search_articles(url)')
     
     conn.commit()
     return conn
 
-def clean_html_summary(html_text: Optional[str]) -> Optional[str]:
-    """Remove HTML formatting from summary"""
-    if not html_text:
-        return None
-    # Remove HTML tags
-    soup = BeautifulSoup(html_text, 'html.parser')
-    text = soup.get_text(separator=' ').strip()
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-    # Remove common artifacts
-    text = text.replace('&nbsp;', ' ').strip()
-    return text
+def is_valid_bloomberg_url(url: str) -> bool:
+    """Check if URL is a valid Bloomberg article URL"""
+    try:
+        parsed = urlparse(url)
+        return (parsed.netloc.endswith('bloomberg.com') and 
+                not any(x in url.lower() for x in ['/videos/', '/audio/', '/podcasts/']))
+    except:
+        return False
 
-def get_nuclear_news_by_date_range(conn: sqlite3.Connection, start_date: str, end_date: str, source: str = 'bloomberg.com') -> Tuple[int, int]:
+def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[int, int]:
     """
-    Fetch nuclear-related news articles from a specific source within a date range
+    Fetch nuclear-related articles from Bloomberg for a specific date
     Args:
         conn: SQLite connection
-        start_date: Start date in YYYY-MM-DD format
-        end_date: End date in YYYY-MM-DD format
-        source: News source domain
+        date: Date in YYYY-MM-DD format
     Returns:
         Tuple of (total_processed, total_added) counts
     """
     try:
-        gn = GoogleNews(lang='en')
-        logging.info(f"Searching for nuclear news from {source} between {start_date} and {end_date}")
-        
-        # Construct query with source restriction and intitle:nuclear
-        query = f"intitle:nuclear site:{source}"
-        
-        # Search with date range
-        search_results = gn.search(query, from_=start_date, to_=end_date)
-        
-        # Extract relevant information
-        entries = search_results.get('entries', [])
-        if not entries:
-            logging.info("No entries found")
-            return 0, 0
-            
-        logging.info(f"Found {len(entries)} entries")
+        query = f'site:bloomberg.com intitle:nuclear'
+        logging.info(f"Searching for: {query}")
         
         cursor = conn.cursor()
         total_processed = 0
         total_added = 0
         
-        for entry in entries:
+        # Use Google Search
+        search_results = search(query, num_results=100, lang="en")
+        
+        for url in search_results:
             try:
-                # Parse the publication date
-                pub_date = datetime(*entry.published_parsed[:6])
+                if not is_valid_bloomberg_url(url):
+                    continue
                 
-                # Clean the summary
-                html_summary = entry.summary if hasattr(entry, 'summary') else None
-                clean_summary = clean_html_summary(html_summary)
-                
-                # Store in raw_articles table
+                # Store in google_search_articles table
                 cursor.execute('''
-                    INSERT OR IGNORE INTO raw_articles 
-                    (title, google_link, published, published_parsed, 
-                     summary, html_summary)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    entry.title,
-                    entry.link,
-                    entry.published,
-                    pub_date.strftime('%Y-%m-%d'),
-                    clean_summary,
-                    html_summary
-                ))
+                    INSERT OR IGNORE INTO google_search_articles 
+                    (url)
+                    VALUES (?)
+                ''', (url,))
                 
                 if cursor.rowcount > 0:
                     total_added += 1
-                    logging.info(f"Added: {entry.title}")
+                    logging.info(f"Added: {url}")
                 
-            except (AttributeError, TypeError) as e:
-                logging.error(f"Error processing entry: {str(e)}")
+                total_processed += 1
+                
+                # Add a small delay between requests to avoid rate limiting
+                time.sleep(1)
+                
+            except Exception as e:
+                logging.error(f"Error processing URL {url}: {str(e)}")
                 continue
-                
-            total_processed += 1
         
         conn.commit()
-        logging.info(f"Successfully processed {total_processed} entries, added {total_added} new articles")
+        logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles")
         return total_processed, total_added
         
     except Exception as e:
-        logging.error(f"Error fetching news: {str(e)}")
+        logging.error(f"Error fetching articles: {str(e)}")
         conn.rollback()
         return 0, 0
 
 def generate_daily_ranges(start_date: str, end_date: str) -> list:
-    """Generate a list of daily date ranges"""
+    """Generate a list of daily dates"""
     start = datetime.strptime(start_date, '%Y-%m-%d')
     end = datetime.strptime(end_date, '%Y-%m-%d')
     
-    ranges = []
+    dates = []
     current = start
     while current <= end:
-        ranges.append((current.strftime('%Y-%m-%d'), current.strftime('%Y-%m-%d')))
+        dates.append(current.strftime('%Y-%m-%d'))
         current += timedelta(days=1)
     
-    return ranges
-
-def update_clean_articles(conn: sqlite3.Connection) -> int:
-    """
-    Update clean_articles table with unique Google links
-    Returns:
-        Number of new articles added to clean table
-    """
-    cursor = conn.cursor()
-    
-    # Get current count
-    cursor.execute('SELECT COUNT(*) FROM clean_articles')
-    before_count = cursor.fetchone()[0]
-    
-    # Insert new articles with unique Google links
-    cursor.execute('''
-        INSERT OR IGNORE INTO clean_articles 
-        (title, google_link, published, published_parsed, summary, raw_id)
-        SELECT title, google_link, published, published_parsed, summary, id
-        FROM raw_articles 
-        WHERE google_link NOT IN (SELECT google_link FROM clean_articles)
-    ''')
-    
-    # Get new count
-    cursor.execute('SELECT COUNT(*) FROM clean_articles')
-    after_count = cursor.fetchone()[0]
-    
-    conn.commit()
-    return after_count - before_count
+    return dates
 
 def get_progress_stats(conn: sqlite3.Connection) -> None:
     """Print detailed statistics about the collected articles"""
     cursor = conn.cursor()
     
-    # Count raw articles
+    # Stats for Google News articles
     cursor.execute('SELECT COUNT(*) FROM raw_articles')
     raw_count = cursor.fetchone()[0]
     
-    # Count unique articles
     cursor.execute('SELECT COUNT(*) FROM clean_articles')
     clean_count = cursor.fetchone()[0]
     
-    # Get yearly distribution
+    # Stats for Google Search articles
+    cursor.execute('SELECT COUNT(*) FROM google_search_articles')
+    search_count = cursor.fetchone()[0]
+    
+    # Get daily distribution for Google Search articles
     cursor.execute('''
         SELECT 
-            strftime('%Y', published_parsed) as year,
-            COUNT(*) as count,
-            COUNT(DISTINCT strftime('%m', published_parsed)) as months_covered
-        FROM clean_articles
-        GROUP BY year
-        ORDER BY year
+            DATE(fetch_date) as date,
+            COUNT(*) as count
+        FROM google_search_articles
+        GROUP BY DATE(fetch_date)
+        ORDER BY date
     ''')
-    yearly_stats = cursor.fetchall()
+    daily_stats = cursor.fetchall()
     
     # Print statistics
     logging.info("\nCollection Summary:")
-    logging.info(f"Total raw articles: {raw_count}")
-    logging.info(f"Unique articles: {clean_count}")
-    logging.info("\nArticles per year (unique):")
+    logging.info("Google News Articles:")
+    logging.info(f"  - Raw articles: {raw_count}")
+    logging.info(f"  - Clean articles: {clean_count}")
+    logging.info("\nGoogle Search Articles:")
+    logging.info(f"  - Total articles: {search_count}")
+    logging.info("\nDaily distribution (Google Search):")
     
-    for year, count, months in yearly_stats:
-        avg_per_month = count / months if months > 0 else 0
-        logging.info(f"{year}: {count} articles across {months} months (avg: {avg_per_month:.1f}/month)")
+    for date, count in daily_stats:
+        logging.info(f"{date}: {count} articles")
 
 if __name__ == "__main__":
     START_DATE = '2020-01-01'
     END_DATE = datetime.now().strftime('%Y-%m-%d')
-    SOURCE = 'bloomberg.com'
-    DELAY_BETWEEN_REQUESTS = 2  # seconds
+    DELAY_BETWEEN_DAYS = 2  # seconds
     
     # Initialize database
     conn = init_database()
     
     try:
-        # Get daily ranges
-        date_ranges = generate_daily_ranges(START_DATE, END_DATE)
-        total_days = len(date_ranges)
+        # Get daily dates
+        dates = generate_daily_ranges(START_DATE, END_DATE)
+        total_days = len(dates)
         
         logging.info(f"Starting collection for {total_days} days from {START_DATE} to {END_DATE}")
         
         # Process each day
-        for idx, (start, end) in enumerate(date_ranges, 1):
-            logging.info(f"\nProcessing date: {start} ({idx}/{total_days})")
+        for idx, date in enumerate(dates, 1):
+            logging.info(f"\nProcessing date: {date} ({idx}/{total_days})")
             
-            processed, added = get_nuclear_news_by_date_range(conn, start, end, SOURCE)
-            if processed > 0:
-                # Update clean articles table
-                new_unique = update_clean_articles(conn)
-                if new_unique > 0:
-                    logging.info(f"Added {new_unique} new unique articles")
+            processed, added = get_nuclear_articles_for_date(conn, date)
             
-            # Add a delay between requests
-            time.sleep(DELAY_BETWEEN_REQUESTS)
+            # Add a delay between days
+            time.sleep(DELAY_BETWEEN_DAYS)
         
         # Print final statistics
         get_progress_stats(conn)
