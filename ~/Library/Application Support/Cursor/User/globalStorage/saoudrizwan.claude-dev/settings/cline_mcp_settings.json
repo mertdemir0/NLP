@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "github.com/graphlit/graphlit-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "graphlit-mcp-server"
+      ],
+      "env": {
+        "GRAPHLIT_ORGANIZATION_ID": "your-organization-id",
+        "GRAPHLIT_ENVIRONMENT_ID": "your-environment-id",
+        "GRAPHLIT_JWT_SECRET": "your-jwt-secret"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/21st-dev/magic-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@21st-dev/magic-mcp",
+        "--config",
+        "\"{\\\"TWENTY_FIRST_API_KEY\\\":\\\"your-api-key\\\"}\""
+      ],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "github.com/mendableai/firecrawl-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "firecrawl-mcp"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "fc-placeholder"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
