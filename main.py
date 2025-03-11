@@ -1,11 +1,12 @@
 import scrapy
+from scrapy_splash import SplashRequest
 from scrapy.crawler import CrawlerProcess
 from scrapy.spiders import Spider
 from datetime import datetime, timedelta
 import sqlite3
 import logging
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import json
 from typing import List, Dict, Any
 
@@ -19,13 +20,46 @@ logging.basicConfig(
     ]
 )
 
+# Lua script for Splash to execute
+SEARCH_SCRIPT = """
+function main(splash, args)
+    splash:set_user_agent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    splash:on_request(function(request)
+        request:set_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
+        request:set_header('Accept-Language', 'en-US,en;q=0.5')
+    end)
+    
+    local ok, reason = splash:go(args.url)
+    if not ok then
+        return {error = reason}
+    end
+    
+    splash:wait(2)
+    
+    return {
+        html = splash:html(),
+        url = splash:url(),
+        cookies = splash:get_cookies()
+    }
+end
+"""
+
 class GoogleSearchSpider(Spider):
     name = 'google_search'
     custom_settings = {
         'ROBOTSTXT_OBEY': False,
-        'DOWNLOAD_DELAY': 5,  # 5 seconds delay between requests
+        'DOWNLOAD_DELAY': 10,  # 10 seconds delay between requests
         'CONCURRENT_REQUESTS': 1,  # Only one request at a time
-        'USER_AGENT': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'SPLASH_URL': 'http://localhost:8050',
+        'DOWNLOADER_MIDDLEWARES': {
+            'scrapy_splash.SplashCookiesMiddleware': 723,
+            'scrapy_splash.SplashMiddleware': 725,
+            'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware': 810,
+        },
+        'SPIDER_MIDDLEWARES': {
+            'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
+        },
+        'DUPEFILTER_CLASS': 'scrapy_splash.SplashAwareDupeFilter',
     }
 
     def __init__(self, date: str = None, *args, **kwargs):
@@ -38,11 +72,16 @@ class GoogleSearchSpider(Spider):
     def start_requests(self):
         base_url = "https://www.google.com/search"
         query = f'site:bloomberg.com intitle:nuclear "{self.date}"'
+        url = f"{base_url}?q={quote(query)}&num=100"
         
-        # Start with first page
-        yield scrapy.Request(
-            f"{base_url}?q={query}&num=100",
+        yield SplashRequest(
+            url,
             callback=self.parse_search_results,
+            endpoint='execute',
+            args={
+                'lua_source': SEARCH_SCRIPT,
+                'wait': 5,
+            },
             meta={'page': 1}
         )
 
@@ -61,8 +100,17 @@ class GoogleSearchSpider(Spider):
         if self.results_count < self.max_results:
             next_page = response.css('a#pnnext::attr(href)').get()
             if next_page:
-                time.sleep(5)  # Add delay before next page
-                yield response.follow(next_page, callback=self.parse_search_results)
+                time.sleep(10)  # Add delay before next page
+                yield SplashRequest(
+                    response.urljoin(next_page),
+                    callback=self.parse_search_results,
+                    endpoint='execute',
+                    args={
+                        'lua_source': SEARCH_SCRIPT,
+                        'wait': 5,
+                    },
+                    meta={'page': response.meta['page'] + 1}
+                )
 
     def is_valid_bloomberg_url(self, url: str) -> bool:
         """Check if URL is a valid Bloomberg article URL"""
@@ -144,7 +192,7 @@ def main():
                 'LOG_LEVEL': 'ERROR',
                 'COOKIES_ENABLED': False,
                 'RETRY_TIMES': 3,
-                'DOWNLOAD_TIMEOUT': 30,
+                'DOWNLOAD_TIMEOUT': 60,
             })
             
             process.crawl(GoogleSearchSpider, date=date)
@@ -154,7 +202,7 @@ def main():
             process.stop()
             
             # Add delay between days
-            time.sleep(30)  # 30 seconds between days
+            time.sleep(60)  # 60 seconds between days
             
     except Exception as e:
         logging.error(f"Error during execution: {str(e)}")
