@@ -23,7 +23,6 @@ logging.basicConfig(
     ]
 )
 
-<<<<<<< HEAD
 def get_free_proxies() -> List[str]:
     """Get a list of free proxies"""
     proxies = []
@@ -50,23 +49,17 @@ def get_free_proxies() -> List[str]:
         logging.error(f"Error getting proxies: {str(e)}")
         return []
 
-=======
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
 # Lua script for Splash to execute
 SEARCH_SCRIPT = """
 function main(splash, args)
     splash:set_user_agent(args.user_agent)
     
-<<<<<<< HEAD
     -- Set custom headers
-=======
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
     splash:on_request(function(request)
         request:set_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
         request:set_header('Accept-Language', 'en-US,en;q=0.5')
     end)
     
-<<<<<<< HEAD
     -- Set proxy if provided
     if args.proxy then
         splash:on_request(function(request)
@@ -107,14 +100,6 @@ function main(splash, args)
     -- Scroll back up randomly
     splash:evaljs(string.format("window.scrollTo(0, %d)", math.random(0, document.body.scrollHeight/2)))
     splash:wait(math.random(1, 2))
-=======
-    assert(splash:go(args.url))
-    splash:wait(5)
-    
-    -- Scroll down a bit to simulate human behavior
-    splash:evaljs("window.scrollTo(0, document.body.scrollHeight/4)")
-    splash:wait(1)
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
     
     return {
         html = splash:html(),
@@ -136,11 +121,7 @@ class GoogleSearchSpider(Spider):
     name = 'google_search'
     custom_settings = {
         'ROBOTSTXT_OBEY': False,
-<<<<<<< HEAD
         'DOWNLOAD_DELAY': 30,  # 30 seconds delay between requests
-=======
-        'DOWNLOAD_DELAY': 20,  # 20 seconds delay between requests
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
         'CONCURRENT_REQUESTS': 1,  # Only one request at a time
         'COOKIES_ENABLED': True,
         'SPLASH_URL': 'http://localhost:8050',
@@ -160,7 +141,6 @@ class GoogleSearchSpider(Spider):
         self.date = date
         self.conn = init_database()
         self.results_count = 0
-<<<<<<< HEAD
         self.max_results = 20  # Further reduced maximum results per day
         self.proxies = get_free_proxies()
         self.current_proxy_index = 0
@@ -182,14 +162,10 @@ class GoogleSearchSpider(Spider):
             }
         except:
             return None
-=======
-        self.max_results = 30  # Reduced maximum results per day to avoid detection
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
 
     def start_requests(self):
         base_url = "https://www.google.com/search"
         query = f'site:bloomberg.com intitle:nuclear "{self.date}"'
-<<<<<<< HEAD
         url = f"{base_url}?q={quote(query)}&num=20"
         
         proxy_info = self.get_next_proxy()
@@ -206,23 +182,11 @@ class GoogleSearchSpider(Spider):
                 'proxy_port': proxy_info['port']
             })
         
-=======
-        url = f"{base_url}?q={quote(query)}&num=30"
-        
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
         yield SplashRequest(
             url,
             callback=self.parse_search_results,
             endpoint='execute',
-<<<<<<< HEAD
             args=splash_args,
-=======
-            args={
-                'lua_source': SEARCH_SCRIPT,
-                'user_agent': random.choice(USER_AGENTS),
-                'wait': 5,
-            },
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
             meta={'page': 1}
         )
 
@@ -242,7 +206,6 @@ class GoogleSearchSpider(Spider):
         if self.results_count < self.max_results:
             next_page = response.css('a#pnnext::attr(href)').get()
             if next_page:
-<<<<<<< HEAD
                 delay = random.uniform(30, 45)  # Longer random delay between pages
                 logging.info(f"Waiting {delay:.1f} seconds before next page...")
                 time.sleep(delay)
@@ -261,25 +224,11 @@ class GoogleSearchSpider(Spider):
                         'proxy_port': proxy_info['port']
                     })
                 
-=======
-                delay = random.uniform(20, 30)  # Random delay between pages
-                logging.info(f"Waiting {delay:.1f} seconds before next page...")
-                time.sleep(delay)
-                
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
                 yield SplashRequest(
                     response.urljoin(next_page),
                     callback=self.parse_search_results,
                     endpoint='execute',
-<<<<<<< HEAD
                     args=splash_args,
-=======
-                    args={
-                        'lua_source': SEARCH_SCRIPT,
-                        'user_agent': random.choice(USER_AGENTS),
-                        'wait': 5,
-                    },
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
                     meta={'page': response.meta['page'] + 1}
                 )
 
@@ -363,11 +312,7 @@ def main():
                 'LOG_LEVEL': 'INFO',
                 'COOKIES_ENABLED': True,
                 'RETRY_TIMES': 3,
-<<<<<<< HEAD
                 'DOWNLOAD_TIMEOUT': 90,
-=======
-                'DOWNLOAD_TIMEOUT': 60,
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
             })
             
             process.crawl(GoogleSearchSpider, date=date)
@@ -377,11 +322,7 @@ def main():
             process.stop()
             
             # Add random delay between days
-<<<<<<< HEAD
             delay = random.uniform(120, 180)  # Random delay between 2-3 minutes
-=======
-            delay = random.uniform(90, 120)  # Random delay between 1.5-2 minutes
->>>>>>> cadf26e66014e9c102aafaf822da77ec56712ead
             logging.info(f"Waiting {delay:.1f} seconds before next day...")
             time.sleep(delay)
             
