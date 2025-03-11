@@ -51,14 +51,13 @@ def init_database() -> sqlite3.Connection:
     # New table for Google Search results
     c.execute('''CREATE TABLE IF NOT EXISTS google_search_articles
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  url TEXT UNIQUE,
+                  url TEXT,
                   title TEXT,
                   fetch_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
     # Create indices for better performance
     c.execute('CREATE INDEX IF NOT EXISTS idx_google_link ON raw_articles(google_link)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_published_parsed ON clean_articles(published_parsed)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_search_url ON google_search_articles(url)')
     
     conn.commit()
     return conn
@@ -99,14 +98,13 @@ def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[
                 
                 # Store in google_search_articles table
                 cursor.execute('''
-                    INSERT OR IGNORE INTO google_search_articles 
+                    INSERT INTO google_search_articles 
                     (url)
                     VALUES (?)
                 ''', (url,))
                 
-                if cursor.rowcount > 0:
-                    total_added += 1
-                    logging.info(f"Added: {url}")
+                total_added += 1
+                logging.info(f"Added: {url}")
                 
                 total_processed += 1
                 
