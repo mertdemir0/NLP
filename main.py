@@ -1,4 +1,5 @@
 import scrapy
+from scrapy_splash import SplashRequest
 from scrapy.crawler import CrawlerProcess
 from scrapy.spiders import Spider
 from datetime import datetime, timedelta
@@ -20,6 +21,31 @@ logging.basicConfig(
     ]
 )
 
+# Lua script for Splash to execute
+SEARCH_SCRIPT = """
+function main(splash, args)
+    splash:set_user_agent(args.user_agent)
+    
+    splash:on_request(function(request)
+        request:set_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
+        request:set_header('Accept-Language', 'en-US,en;q=0.5')
+    end)
+    
+    assert(splash:go(args.url))
+    splash:wait(5)
+    
+    -- Scroll down a bit to simulate human behavior
+    splash:evaljs("window.scrollTo(0, document.body.scrollHeight/4)")
+    splash:wait(1)
+    
+    return {
+        html = splash:html(),
+        url = splash:url(),
+        cookies = splash:get_cookies()
+    }
+end
+"""
+
 # List of user agents to rotate
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -32,15 +58,19 @@ class GoogleSearchSpider(Spider):
     name = 'google_search'
     custom_settings = {
         'ROBOTSTXT_OBEY': False,
-        'DOWNLOAD_DELAY': 15,  # 15 seconds delay between requests
+        'DOWNLOAD_DELAY': 20,  # 20 seconds delay between requests
         'CONCURRENT_REQUESTS': 1,  # Only one request at a time
         'COOKIES_ENABLED': True,
-        'DEFAULT_REQUEST_HEADERS': {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-        }
+        'SPLASH_URL': 'http://localhost:8050',
+        'DOWNLOADER_MIDDLEWARES': {
+            'scrapy_splash.SplashCookiesMiddleware': 723,
+            'scrapy_splash.SplashMiddleware': 725,
+            'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware': 810,
+        },
+        'SPIDER_MIDDLEWARES': {
+            'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
+        },
+        'DUPEFILTER_CLASS': 'scrapy_splash.SplashAwareDupeFilter',
     }
 
     def __init__(self, date: str = None, *args, **kwargs):
@@ -48,35 +78,26 @@ class GoogleSearchSpider(Spider):
         self.date = date
         self.conn = init_database()
         self.results_count = 0
-        self.max_results = 50  # Reduced maximum results per day to avoid detection
+        self.max_results = 30  # Reduced maximum results per day to avoid detection
 
     def start_requests(self):
         base_url = "https://www.google.com/search"
         query = f'site:bloomberg.com intitle:nuclear "{self.date}"'
-        url = f"{base_url}?q={quote(query)}&num=50"
+        url = f"{base_url}?q={quote(query)}&num=30"
         
-        headers = {
-            'User-Agent': random.choice(USER_AGENTS)
-        }
-        
-        yield scrapy.Request(
+        yield SplashRequest(
             url,
             callback=self.parse_search_results,
-            headers=headers,
-            meta={
-                'page': 1,
-                'dont_redirect': True,
-                'handle_httpstatus_list': [302, 403, 503]
-            }
+            endpoint='execute',
+            args={
+                'lua_source': SEARCH_SCRIPT,
+                'user_agent': random.choice(USER_AGENTS),
+                'wait': 5,
+            },
+            meta={'page': 1}
         )
 
     def parse_search_results(self, response):
-        # Check if we got blocked
-        if response.status in [302, 403, 503] or 'sorry/index' in response.url:
-            logging.warning(f"Got blocked on page {response.meta['page']}, waiting longer...")
-            time.sleep(60)  # Wait a minute before retrying
-            return
-            
         # Extract all search result links
         for result in response.css('div.g'):
             if self.results_count >= self.max_results:
@@ -86,24 +107,26 @@ class GoogleSearchSpider(Spider):
             if link and 'bloomberg.com' in link and self.is_valid_bloomberg_url(link):
                 self.results_count += 1
                 self.save_to_db(link)
+                logging.info(f"Found article: {link}")
 
         # Check if there's a next page and we haven't reached the limit
         if self.results_count < self.max_results:
             next_page = response.css('a#pnnext::attr(href)').get()
             if next_page:
-                time.sleep(random.uniform(15, 20))  # Random delay between pages
-                headers = {
-                    'User-Agent': random.choice(USER_AGENTS)
-                }
-                yield scrapy.Request(
+                delay = random.uniform(20, 30)  # Random delay between pages
+                logging.info(f"Waiting {delay:.1f} seconds before next page...")
+                time.sleep(delay)
+                
+                yield SplashRequest(
                     response.urljoin(next_page),
                     callback=self.parse_search_results,
-                    headers=headers,
-                    meta={
-                        'page': response.meta['page'] + 1,
-                        'dont_redirect': True,
-                        'handle_httpstatus_list': [302, 403, 503]
-                    }
+                    endpoint='execute',
+                    args={
+                        'lua_source': SEARCH_SCRIPT,
+                        'user_agent': random.choice(USER_AGENTS),
+                        'wait': 5,
+                    },
+                    meta={'page': response.meta['page'] + 1}
                 )
 
     def is_valid_bloomberg_url(self, url: str) -> bool:
@@ -183,10 +206,10 @@ def main():
             logging.info(f"\nProcessing date: {date} ({idx}/{total_days})")
             
             process = CrawlerProcess({
-                'LOG_LEVEL': 'INFO',  # Changed to INFO for better visibility
+                'LOG_LEVEL': 'INFO',
                 'COOKIES_ENABLED': True,
                 'RETRY_TIMES': 3,
-                'DOWNLOAD_TIMEOUT': 30,
+                'DOWNLOAD_TIMEOUT': 60,
             })
             
             process.crawl(GoogleSearchSpider, date=date)
@@ -196,7 +219,7 @@ def main():
             process.stop()
             
             # Add random delay between days
-            delay = random.uniform(60, 90)  # Random delay between 1-1.5 minutes
+            delay = random.uniform(90, 120)  # Random delay between 1.5-2 minutes
             logging.info(f"Waiting {delay:.1f} seconds before next day...")
             time.sleep(delay)
             
