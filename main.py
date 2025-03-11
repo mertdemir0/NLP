@@ -10,8 +10,6 @@ from urllib.parse import urlparse, quote
 import json
 from typing import List, Dict, Any
 import random
-import requests
-from bs4 import BeautifulSoup
 
 # Set up logging
 logging.basicConfig(
@@ -23,35 +21,10 @@ logging.basicConfig(
     ]
 )
 
-def get_free_proxies() -> List[str]:
-    """Get a list of free proxies"""
-    proxies = []
-    try:
-        # Get proxies from free-proxy-list.net
-        response = requests.get('https://free-proxy-list.net/')
-        soup = BeautifulSoup(response.text, 'html.parser')
-        proxy_table = soup.find('table')
-        
-        if proxy_table:
-            for row in proxy_table.find_all('tr')[1:]:  # Skip header
-                cols = row.find_all('td')
-                if len(cols) >= 7:
-                    ip = cols[0].text.strip()
-                    port = cols[1].text.strip()
-                    https = cols[6].text.strip()
-                    if https == 'yes':
-                        proxy = f'http://{ip}:{port}'
-                        proxies.append(proxy)
-        
-        logging.info(f"Found {len(proxies)} free proxies")
-        return proxies[:10]  # Return top 10 proxies
-    except Exception as e:
-        logging.error(f"Error getting proxies: {str(e)}")
-        return []
-
 # Lua script for Splash to execute
 SEARCH_SCRIPT = """
 function main(splash, args)
+    -- Set user agent
     splash:set_user_agent(args.user_agent)
     
     -- Set custom headers
@@ -60,50 +33,16 @@ function main(splash, args)
         request:set_header('Accept-Language', 'en-US,en;q=0.5')
     end)
     
-    -- Set proxy if provided
-    if args.proxy then
-        splash:on_request(function(request)
-            request:set_proxy{
-                host = args.proxy_host,
-                port = args.proxy_port,
-                type = 'HTTP'
-            }
-        end)
-    end
+    -- Load page
+    assert(splash:go(args.url))
+    splash:wait(5)
     
-    -- Randomize viewport size
-    local width = math.random(1024, 1920)
-    local height = math.random(768, 1080)
-    splash:set_viewport_size(width, height)
-    
-    -- Load page with retry
-    local ok, reason
-    for retry=1,3 do
-        ok, reason = splash:go(args.url)
-        if ok then break end
-        splash:wait(2)
-    end
-    
-    if not ok then
-        return {error = reason}
-    end
-    
-    -- Random initial wait
-    splash:wait(math.random(4, 7))
-    
-    -- Scroll down slowly to simulate human behavior
-    for i=1,4 do
-        splash:evaljs(string.format("window.scrollTo(0, %d)", i * document.body.scrollHeight/4))
-        splash:wait(math.random(1, 2))
-    end
-    
-    -- Scroll back up randomly
-    splash:evaljs(string.format("window.scrollTo(0, %d)", math.random(0, document.body.scrollHeight/2)))
-    splash:wait(math.random(1, 2))
+    -- Scroll down slowly
+    splash:evaljs("window.scrollTo(0, document.body.scrollHeight/4)")
+    splash:wait(2)
     
     return {
         html = splash:html(),
-        url = splash:url(),
         cookies = splash:get_cookies()
     }
 end
@@ -141,52 +80,22 @@ class GoogleSearchSpider(Spider):
         self.date = date
         self.conn = init_database()
         self.results_count = 0
-        self.max_results = 20  # Further reduced maximum results per day
-        self.proxies = get_free_proxies()
-        self.current_proxy_index = 0
-
-    def get_next_proxy(self) -> Dict[str, str]:
-        """Get next proxy from the pool"""
-        if not self.proxies:
-            return None
-            
-        proxy = self.proxies[self.current_proxy_index]
-        self.current_proxy_index = (self.current_proxy_index + 1) % len(self.proxies)
-        
-        try:
-            # Parse proxy URL
-            proxy_parts = proxy.split('://')[-1].split(':')
-            return {
-                'host': proxy_parts[0],
-                'port': int(proxy_parts[1])
-            }
-        except:
-            return None
+        self.max_results = 20  # Reduced maximum results per day
 
     def start_requests(self):
         base_url = "https://www.google.com/search"
         query = f'site:bloomberg.com intitle:nuclear "{self.date}"'
         url = f"{base_url}?q={quote(query)}&num=20"
         
-        proxy_info = self.get_next_proxy()
-        splash_args = {
-            'lua_source': SEARCH_SCRIPT,
-            'user_agent': random.choice(USER_AGENTS),
-            'wait': 5,
-        }
-        
-        if proxy_info:
-            splash_args.update({
-                'proxy': True,
-                'proxy_host': proxy_info['host'],
-                'proxy_port': proxy_info['port']
-            })
-        
         yield SplashRequest(
             url,
             callback=self.parse_search_results,
             endpoint='execute',
-            args=splash_args,
+            args={
+                'lua_source': SEARCH_SCRIPT,
+                'user_agent': random.choice(USER_AGENTS),
+                'wait': 5,
+            },
             meta={'page': 1}
         )
 
@@ -206,29 +115,19 @@ class GoogleSearchSpider(Spider):
         if self.results_count < self.max_results:
             next_page = response.css('a#pnnext::attr(href)').get()
             if next_page:
-                delay = random.uniform(30, 45)  # Longer random delay between pages
+                delay = random.uniform(30, 45)  # Random delay between pages
                 logging.info(f"Waiting {delay:.1f} seconds before next page...")
                 time.sleep(delay)
-                
-                proxy_info = self.get_next_proxy()
-                splash_args = {
-                    'lua_source': SEARCH_SCRIPT,
-                    'user_agent': random.choice(USER_AGENTS),
-                    'wait': 5,
-                }
-                
-                if proxy_info:
-                    splash_args.update({
-                        'proxy': True,
-                        'proxy_host': proxy_info['host'],
-                        'proxy_port': proxy_info['port']
-                    })
                 
                 yield SplashRequest(
                     response.urljoin(next_page),
                     callback=self.parse_search_results,
                     endpoint='execute',
-                    args=splash_args,
+                    args={
+                        'lua_source': SEARCH_SCRIPT,
+                        'user_agent': random.choice(USER_AGENTS),
+                        'wait': 5,
+                    },
                     meta={'page': response.meta['page'] + 1}
                 )
 
