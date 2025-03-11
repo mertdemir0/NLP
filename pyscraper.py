@@ -71,32 +71,38 @@ def get_free_proxies() -> List[str]:
     
     return list(proxies)
 
-def search_with_proxy(query: str, proxy: str, start_index: int = 0, num_results: int = 100) -> List[str]:
+def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 100) -> List[str]:
     """Perform Google search using a proxy"""
-    ua = UserAgent()
-    headers = {'User-Agent': ua.random}
-    
     try:
+        # Modify query to include page information using time ranges
+        if page > 0:
+            # Add time range to help with pagination
+            query = f"{query} when:{page*10}-{(page+1)*10}"
+        
         results = list(search(
             query,
-            start_index=start_index,
             num_results=num_results,
             lang="en",
             proxy=proxy,
-            headers=headers
+            pause=2.0  # Add pause between requests
         ))
         return results
     except Exception as e:
         logging.error(f"Error with proxy {proxy}: {str(e)}")
         return []
 
-def get_nuclear_articles(conn: sqlite3.Connection) -> Tuple[int, int]:
+def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[int, int]:
     """
-    Fetch nuclear-related articles from Bloomberg using parallel processing and multiple pages
+    Fetch nuclear-related articles from Bloomberg for a specific date using parallel processing and multiple pages
+    Args:
+        conn: SQLite connection
+        date: Date in YYYY-MM-DD format
+    Returns:
+        Tuple of (total_processed, total_added) counts
     """
     try:
-        query = f'site:bloomberg.com intitle:nuclear'
-        logging.info(f"Searching for: {query}")
+        base_query = f'site:bloomberg.com intitle:nuclear "{date}"'
+        logging.info(f"Searching for: {base_query}")
         
         cursor = conn.cursor()
         total_processed = 0
@@ -110,23 +116,33 @@ def get_nuclear_articles(conn: sqlite3.Connection) -> Tuple[int, int]:
         
         proxy_pool = cycle(proxies)
         
-        # Create search tasks with different start indices to get multiple pages
+        # Create search tasks for different time ranges to simulate pagination
         tasks = []
-        for page in range(20):  # Try to get 20 pages
-            start_index = page * 100
+        max_pages = 10  # Reduced number of pages to avoid rate limiting
+        for page in range(max_pages):
             proxy = next(proxy_pool)
-            tasks.append((query, proxy, start_index, 100))
+            tasks.append((base_query, proxy, page, 100))
         
         # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_search = {
-                executor.submit(search_with_proxy, q, p, s, n): (q, p, s, n) 
-                for q, p, s, n in tasks
+                executor.submit(search_with_proxy, q, p, pg, n): (q, p, pg, n) 
+                for q, p, pg, n in tasks
             }
+            
+            empty_result_count = 0  # Track consecutive empty results
             
             for future in concurrent.futures.as_completed(future_to_search):
                 try:
                     urls = future.result()
+                    
+                    if not urls:
+                        empty_result_count += 1
+                        if empty_result_count >= 2:  # If 2 consecutive empty results, assume no more pages
+                            logging.info("No more results found for this date")
+                            break
+                    else:
+                        empty_result_count = 0  # Reset counter when we find results
                     
                     for url in urls:
                         try:
@@ -135,9 +151,9 @@ def get_nuclear_articles(conn: sqlite3.Connection) -> Tuple[int, int]:
                             
                             cursor.execute('''
                                 INSERT INTO google_search_articles 
-                                (url)
-                                VALUES (?)
-                            ''', (url,))
+                                (url, fetch_date)
+                                VALUES (?, ?)
+                            ''', (url, date))
                             
                             total_added += 1
                             logging.info(f"Added: {url}")
@@ -151,13 +167,25 @@ def get_nuclear_articles(conn: sqlite3.Connection) -> Tuple[int, int]:
                     logging.error(f"Error in search thread: {str(e)}")
         
         conn.commit()
-        logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles")
+        logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles for date {date}")
         return total_processed, total_added
         
     except Exception as e:
         logging.error(f"Error fetching articles: {str(e)}")
         conn.rollback()
         return 0, 0
+
+def generate_daily_ranges(start_date: str, end_date: str) -> List[str]:
+    """Generate a list of daily dates from start_date to end_date"""
+    start = datetime.strptime(start_date, '%Y-%m-%d')
+    end = datetime.strptime(end_date, '%Y-%m-%d')
+    dates = []
+    
+    while start <= end:
+        dates.append(start.strftime('%Y-%m-%d'))
+        start += timedelta(days=1)
+    
+    return dates
 
 def get_progress_stats(conn: sqlite3.Connection) -> None:
     """Print detailed statistics about the collected articles"""
@@ -188,19 +216,40 @@ def get_progress_stats(conn: sqlite3.Connection) -> None:
         logging.info(f"{date}: {count} articles")
 
 if __name__ == "__main__":
+    START_DATE = '2020-01-01'
+    END_DATE = datetime.now().strftime('%Y-%m-%d')
+    DELAY_BETWEEN_DAYS = 5  # seconds, increased to avoid rate limiting
+    
     # Initialize database
     conn = init_database()
     
     try:
-        logging.info("Starting article collection")
-        processed, added = get_nuclear_articles(conn)
-        logging.info(f"\nCollection completed. Total processed: {processed}, Total added: {added}")
+        # Get daily dates
+        dates = generate_daily_ranges(START_DATE, END_DATE)
+        total_days = len(dates)
+        
+        logging.info(f"Starting collection for {total_days} days from {START_DATE} to {END_DATE}")
+        
+        total_processed = 0
+        total_added = 0
+        
+        # Process each day
+        for idx, date in enumerate(dates, 1):
+            logging.info(f"\nProcessing date: {date} ({idx}/{total_days})")
+            
+            processed, added = get_nuclear_articles_for_date(conn, date)
+            total_processed += processed
+            total_added += added
+            
+            logging.info(f"Progress - Total processed: {total_processed}, Total added: {total_added}")
+            
+            # Add a delay between days
+            time.sleep(DELAY_BETWEEN_DAYS)
         
         # Print final statistics
         get_progress_stats(conn)
         
     except Exception as e:
         logging.error(f"Error during execution: {str(e)}")
-    
     finally:
         conn.close()
