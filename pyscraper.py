@@ -79,12 +79,14 @@ def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 
             # Add time range to help with pagination
             query = f"{query} when:{page*10}-{(page+1)*10}"
         
+        # Add sleep to avoid rate limiting
+        time.sleep(2.0)
+        
         results = list(search(
             query,
             num_results=num_results,
             lang="en",
-            proxy=proxy,
-            pause=2.0  # Add pause between requests
+            proxy=proxy
         ))
         return results
     except Exception as e:
@@ -118,13 +120,13 @@ def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[
         
         # Create search tasks for different time ranges to simulate pagination
         tasks = []
-        max_pages = 10  # Reduced number of pages to avoid rate limiting
+        max_pages = 5  # Further reduced number of pages to avoid rate limiting
         for page in range(max_pages):
             proxy = next(proxy_pool)
-            tasks.append((base_query, proxy, page, 100))
+            tasks.append((base_query, proxy, page, 50))  # Reduced results per page
         
         # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:  # Reduced workers
             future_to_search = {
                 executor.submit(search_with_proxy, q, p, pg, n): (q, p, pg, n) 
                 for q, p, pg, n in tasks
