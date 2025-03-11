@@ -297,3 +297,5 @@ src/config.py
 
 # windsurf rules
 .windsurfrules
+
+.cursor\mcp.json
