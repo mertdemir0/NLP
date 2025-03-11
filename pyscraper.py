@@ -8,8 +8,12 @@ import sqlite3
 import re
 from bs4 import BeautifulSoup
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from urllib.parse import urlparse
+import concurrent.futures
+import requests
+from fake_useragent import UserAgent
+from itertools import cycle
 
 # Set up logging
 logging.basicConfig(
@@ -71,14 +75,49 @@ def is_valid_bloomberg_url(url: str) -> bool:
     except:
         return False
 
+def get_free_proxies() -> List[str]:
+    """Get a list of free proxies from various sources"""
+    proxies = set()
+    
+    # Free proxy list
+    url = "https://free-proxy-list.net/"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    for row in soup.find("table", attrs={"class": "table table-striped table-bordered"}).find_all("tr")[1:]:
+        tds = row.find_all("td")
+        try:
+            ip = tds[0].text.strip()
+            port = tds[1].text.strip()
+            https = tds[6].text.strip()
+            if https == "yes":
+                proxies.add(f"http://{ip}:{port}")
+        except:
+            continue
+    
+    return list(proxies)
+
+def search_with_proxy(query: str, proxy: str, num_results: int = 10) -> List[str]:
+    """Perform Google search using a proxy"""
+    ua = UserAgent()
+    headers = {'User-Agent': ua.random}
+    
+    try:
+        results = list(search(
+            query,
+            num_results=num_results,
+            lang="en",
+            proxy=proxy,
+            headers=headers
+        ))
+        return results
+    except Exception as e:
+        logging.error(f"Error with proxy {proxy}: {str(e)}")
+        return []
+
 def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[int, int]:
     """
-    Fetch nuclear-related articles from Bloomberg for a specific date
-    Args:
-        conn: SQLite connection
-        date: Date in YYYY-MM-DD format
-    Returns:
-        Tuple of (total_processed, total_added) counts
+    Fetch nuclear-related articles from Bloomberg for a specific date using parallel processing
     """
     try:
         query = f'site:bloomberg.com intitle:nuclear'
@@ -88,32 +127,49 @@ def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[
         total_processed = 0
         total_added = 0
         
-        # Use Google Search
-        search_results = search(query, num_results=100, lang="en")
+        # Get free proxies
+        proxies = get_free_proxies()
+        if not proxies:
+            logging.warning("No proxies available, using direct connection")
+            proxies = [None]
         
-        for url in search_results:
-            try:
-                if not is_valid_bloomberg_url(url):
-                    continue
-                
-                # Store in google_search_articles table
-                cursor.execute('''
-                    INSERT INTO google_search_articles 
-                    (url)
-                    VALUES (?)
-                ''', (url,))
-                
-                total_added += 1
-                logging.info(f"Added: {url}")
-                
-                total_processed += 1
-                
-                # Add a small delay between requests to avoid rate limiting
-                time.sleep(1)
-                
-            except Exception as e:
-                logging.error(f"Error processing URL {url}: {str(e)}")
-                continue
+        proxy_pool = cycle(proxies)
+        
+        # Split the work into chunks
+        chunks = [(query, next(proxy_pool), 10) for _ in range(10)]  # 10 parallel searches with 10 results each
+        
+        # Use ThreadPoolExecutor for parallel processing
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_search = {
+                executor.submit(search_with_proxy, q, p, n): (q, p, n) 
+                for q, p, n in chunks
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_search):
+                try:
+                    urls = future.result()
+                    
+                    for url in urls:
+                        try:
+                            if not is_valid_bloomberg_url(url):
+                                continue
+                            
+                            cursor.execute('''
+                                INSERT INTO google_search_articles 
+                                (url)
+                                VALUES (?)
+                            ''', (url,))
+                            
+                            total_added += 1
+                            logging.info(f"Added: {url}")
+                            total_processed += 1
+                            
+                        except Exception as e:
+                            logging.error(f"Error processing URL {url}: {str(e)}")
+                            continue
+                            
+                except Exception as e:
+                    logging.error(f"Error in search thread: {str(e)}")
         
         conn.commit()
         logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles")
