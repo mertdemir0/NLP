@@ -12,8 +12,12 @@ from typing import Optional, Tuple, List
 from urllib.parse import urlparse
 import concurrent.futures
 import requests
-from fake_useragent import UserAgent
 from itertools import cycle
+import urllib3
+import ssl
+
+# Disable SSL verification warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Set up logging
 logging.basicConfig(
@@ -53,25 +57,40 @@ def get_free_proxies() -> List[str]:
     """Get a list of free proxies from various sources"""
     proxies = set()
     
-    # Free proxy list
-    url = "https://free-proxy-list.net/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    for row in soup.find("table", attrs={"class": "table table-striped table-bordered"}).find_all("tr")[1:]:
-        tds = row.find_all("td")
-        try:
-            ip = tds[0].text.strip()
-            port = tds[1].text.strip()
-            https = tds[6].text.strip()
-            if https == "yes":
-                proxies.add(f"http://{ip}:{port}")
-        except:
-            continue
+    try:
+        # Free proxy list
+        url = "https://free-proxy-list.net/"
+        response = requests.get(url, verify=False)  # Disable SSL verification
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        for row in soup.find("table", attrs={"class": "table table-striped table-bordered"}).find_all("tr")[1:]:
+            tds = row.find_all("td")
+            try:
+                ip = tds[0].text.strip()
+                port = tds[1].text.strip()
+                https = tds[6].text.strip()
+                if https == "yes":
+                    proxies.add(f"http://{ip}:{port}")
+            except:
+                continue
+        
+        if not proxies:
+            logging.warning("No HTTPS proxies found, trying HTTP proxies")
+            # If no HTTPS proxies, try HTTP ones
+            for row in soup.find("table", attrs={"class": "table table-striped table-bordered"}).find_all("tr")[1:]:
+                tds = row.find_all("td")
+                try:
+                    ip = tds[0].text.strip()
+                    port = tds[1].text.strip()
+                    proxies.add(f"http://{ip}:{port}")
+                except:
+                    continue
+    except Exception as e:
+        logging.error(f"Error fetching proxies: {str(e)}")
     
     return list(proxies)
 
-def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 100) -> List[str]:
+def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 50) -> List[str]:
     """Perform Google search using a proxy"""
     try:
         # Modify query to include page information using time ranges
@@ -82,12 +101,23 @@ def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 
         # Add sleep to avoid rate limiting
         time.sleep(2.0)
         
-        results = list(search(
-            query,
-            num_results=num_results,
-            lang="en",
-            proxy=proxy
-        ))
+        try:
+            results = list(search(
+                query,
+                num_results=num_results,
+                lang="en",
+                proxy=proxy,
+                verify_ssl=False  # Disable SSL verification
+            ))
+        except TypeError:
+            # If verify_ssl is not supported, try without it
+            results = list(search(
+                query,
+                num_results=num_results,
+                lang="en",
+                proxy=proxy
+            ))
+            
         return results
     except Exception as e:
         logging.error(f"Error with proxy {proxy}: {str(e)}")
@@ -95,7 +125,7 @@ def search_with_proxy(query: str, proxy: str, page: int = 0, num_results: int = 
 
 def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[int, int]:
     """
-    Fetch nuclear-related articles from Bloomberg for a specific date using parallel processing and multiple pages
+    Fetch nuclear-related articles from Bloomberg for a specific date
     Args:
         conn: SQLite connection
         date: Date in YYYY-MM-DD format
@@ -110,63 +140,93 @@ def get_nuclear_articles_for_date(conn: sqlite3.Connection, date: str) -> Tuple[
         total_processed = 0
         total_added = 0
         
-        # Get free proxies
+        # Try direct connection first
+        try:
+            logging.info("Trying direct connection first...")
+            time.sleep(5.0)  # Add initial delay
+            results = list(search(base_query, num_results=20, lang="en"))  # Reduced results per page
+            
+            for url in results:
+                if not is_valid_bloomberg_url(url):
+                    continue
+                
+                cursor.execute('''
+                    INSERT INTO google_search_articles 
+                    (url, fetch_date)
+                    VALUES (?, ?)
+                ''', (url, date))
+                
+                total_added += 1
+                logging.info(f"Added: {url}")
+                total_processed += 1
+            
+            # If direct connection works, try one more page with longer delay
+            if results:
+                logging.info("Direct connection successful, trying one more page...")
+                time.sleep(10.0)  # Longer delay between pages
+                
+                try:
+                    query = f'{base_query} when:10-20'  # Add time range for second page
+                    page_results = list(search(query, num_results=20, lang="en"))
+                    
+                    for url in page_results:
+                        if not is_valid_bloomberg_url(url):
+                            continue
+                        
+                        cursor.execute('''
+                            INSERT INTO google_search_articles 
+                            (url, fetch_date)
+                            VALUES (?, ?)
+                        ''', (url, date))
+                        
+                        total_added += 1
+                        logging.info(f"Added: {url}")
+                        total_processed += 1
+                        
+                except Exception as e:
+                    logging.error(f"Error fetching second page: {str(e)}")
+            
+            conn.commit()
+            logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles for date {date}")
+            return total_processed, total_added
+        
+        except Exception as e:
+            logging.warning(f"Direct connection failed: {str(e)}, trying with proxies...")
+            time.sleep(30.0)  # Long delay before trying proxies
+        
+        # If direct connection fails, try with proxies
         proxies = get_free_proxies()
         if not proxies:
-            logging.warning("No proxies available, using direct connection")
-            proxies = [None]
+            logging.warning("No proxies available")
+            return total_processed, total_added
         
         proxy_pool = cycle(proxies)
+        proxy = next(proxy_pool)
         
-        # Create search tasks for different time ranges to simulate pagination
-        tasks = []
-        max_pages = 5  # Further reduced number of pages to avoid rate limiting
-        for page in range(max_pages):
-            proxy = next(proxy_pool)
-            tasks.append((base_query, proxy, page, 50))  # Reduced results per page
+        try:
+            results = list(search(
+                base_query,
+                num_results=20,
+                lang="en",
+                proxy=proxy
+            ))
+            
+            for url in results:
+                if not is_valid_bloomberg_url(url):
+                    continue
+                
+                cursor.execute('''
+                    INSERT INTO google_search_articles 
+                    (url, fetch_date)
+                    VALUES (?, ?)
+                ''', (url, date))
+                
+                total_added += 1
+                logging.info(f"Added: {url}")
+                total_processed += 1
         
-        # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:  # Reduced workers
-            future_to_search = {
-                executor.submit(search_with_proxy, q, p, pg, n): (q, p, pg, n) 
-                for q, p, pg, n in tasks
-            }
-            
-            empty_result_count = 0  # Track consecutive empty results
-            
-            for future in concurrent.futures.as_completed(future_to_search):
-                try:
-                    urls = future.result()
-                    
-                    if not urls:
-                        empty_result_count += 1
-                        if empty_result_count >= 2:  # If 2 consecutive empty results, assume no more pages
-                            logging.info("No more results found for this date")
-                            break
-                    else:
-                        empty_result_count = 0  # Reset counter when we find results
-                    
-                    for url in urls:
-                        try:
-                            if not is_valid_bloomberg_url(url):
-                                continue
-                            
-                            cursor.execute('''
-                                INSERT INTO google_search_articles 
-                                (url, fetch_date)
-                                VALUES (?, ?)
-                            ''', (url, date))
-                            
-                            total_added += 1
-                            logging.info(f"Added: {url}")
-                            total_processed += 1
-                            
-                        except Exception as e:
-                            logging.error(f"Error processing URL {url}: {str(e)}")
-                            continue
-                            
-                except Exception as e:
-                    logging.error(f"Error in search thread: {str(e)}")
+        except Exception as e:
+            logging.error(f"Error with proxy: {str(e)}")
         
         conn.commit()
         logging.info(f"Successfully processed {total_processed} URLs, added {total_added} new articles for date {date}")
@@ -220,7 +280,7 @@ def get_progress_stats(conn: sqlite3.Connection) -> None:
 if __name__ == "__main__":
     START_DATE = '2020-01-01'
     END_DATE = datetime.now().strftime('%Y-%m-%d')
-    DELAY_BETWEEN_DAYS = 5  # seconds, increased to avoid rate limiting
+    DELAY_BETWEEN_DAYS = 30  # seconds, increased significantly to avoid rate limiting
     
     # Initialize database
     conn = init_database()
@@ -245,7 +305,7 @@ if __name__ == "__main__":
             
             logging.info(f"Progress - Total processed: {total_processed}, Total added: {total_added}")
             
-            # Add a delay between days
+            # Add a longer delay between days
             time.sleep(DELAY_BETWEEN_DAYS)
         
         # Print final statistics
