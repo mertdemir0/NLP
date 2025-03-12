@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  splash:
+    image: scrapinghub/splash:latest
+    ports:
+      - "8050:8050"
+      - "5023:5023"  # Port for debugger
+    environment:
+      - SPLASH_BROWSER_DEBUG=1
+    restart: always
+    networks:
+      - scraper-network
+
+  nlp-app:
+    build: .
+    depends_on:
+      - splash
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - SPLASH_URL=http://splash:8050
+      - MAX_RESULTS=5         # Reduced for initial testing
+      - START_DATE=2022-01-01 # More recent date for testing
+      - END_DATE=2022-01-10   # Limited date range for testing
+      - DATA_DIR=/app/data
+      - LOG_LEVEL=DEBUG       # Increased logging detail
+      - RETRY_TIMES=5         # More retries
+      - DOWNLOAD_TIMEOUT=120  # Longer timeout
+      - MIN_DELAY=10          # Reduced for testing
+      - MAX_DELAY=30          # Reduced for testing
+    networks:
+      - scraper-network
+    restart: on-failure
+
+networks:
+  scraper-network:
+    driver: bridge
