@@ -1,0 +1,41 @@
+# Core dependencies
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Web Scraping dependencies (most important for your main.py)
+scrapy>=2.7.0
+scrapy-splash>=0.8.0
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+lxml>=4.9.0
+
+# Additional Web Scraping
+newspaper3k>=0.2.8
+fake-useragent>=0.1.11
+trafilatura>=1.6.1
+readability-lxml>=0.8.1
+
+# Data Storage
+sqlalchemy>=1.4.0
+pymongo>=4.6.0
+redis>=5.0.1
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+tqdm>=4.66.0
+joblib>=1.3.0
+psutil>=5.9.0
+tenacity>=8.2.0
+
+# Optional dependencies - comment out if causing problems
+# elasticsearch>=8.11.0
+# kafka-python>=2.0.2
+# dask>=2023.12.0
+# pyarrow>=14.0.1
+
+# NLP - Only if needed for your current functionality
+# torch>=2.0.0
+# transformers>=4.30.0
+# nltk>=3.8.1
+# sentence-transformers>=2.2.0

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  splash:
+    image: scrapinghub/splash:latest
+    ports:
+      - "8050:8050"
+    restart: always
+    networks:
+      - scraper-network
+
+  nlp-app:
+    build: .
+    depends_on:
+      - splash
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - SPLASH_URL=http://splash:8050
+      - MAX_RESULTS=20
+      - START_DATE=2020-01-01
+      - DATA_DIR=/app/data
+      - LOG_LEVEL=INFO
+      - RETRY_TIMES=3
+      - DOWNLOAD_TIMEOUT=90
+      - MIN_DELAY=120
+      - MAX_DELAY=180
+    networks:
+      - scraper-network
+    restart: on-failure
+
+networks:
+  scraper-network:
+    driver: bridge
