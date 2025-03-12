@@ -1,0 +1,50 @@
+services:
+  splash:
+    image: scrapinghub/splash:latest
+    ports:
+      - "8050:8050"
+      - "5023:5023"  # Port for debugger
+    environment:
+      - SPLASH_BROWSER_DEBUG=1
+    volumes:
+      - ./docker_helpers:/app/docker_helpers
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/_ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: always
+    networks:
+      - scraper-network
+
+  nlp-app:
+    build: .
+    depends_on:
+      splash:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./docker_helpers:/app/docker_helpers
+    environment:
+      - SPLASH_URL=http://splash:8050
+      - MAX_RESULTS=5
+      - START_DATE=2022-01-01
+      - END_DATE=2022-01-31
+      - DATA_DIR=/app/data
+      - LOG_LEVEL=DEBUG
+      - RETRY_TIMES=5
+      - DOWNLOAD_TIMEOUT=120
+      - MIN_DELAY=15
+      - MAX_DELAY=45
+      - LUA_SOURCE_PATH=/app/docker_helpers/google_search.lua
+    entrypoint: ["/bin/bash", "/app/docker_helpers/wait-for-splash.sh"]
+    command: ["python", "docker_main.py"]
+    networks:
+      - scraper-network
+    restart: on-failure
+
+networks:
+  scraper-network:
+    driver: bridge
