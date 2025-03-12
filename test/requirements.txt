@@ -1,0 +1,8 @@
+browser-use
+langchain-openai
+python-dotenv
+pandas
+sqlalchemy
+tqdm
+playwright
+fake-useragent
