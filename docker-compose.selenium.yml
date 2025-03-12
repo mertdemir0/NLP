@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+  nlp-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATA_DIR=/app/data
+      - START_DATE=2022-01-01
+      - END_DATE=2022-01-31
+      - MAX_RESULTS=20
+      - LOG_LEVEL=INFO
+      - RETRY_TIMES=5
+      - DOWNLOAD_TIMEOUT=120
+      - MIN_DELAY=10
+      - MAX_DELAY=20
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    entrypoint: |
+      bash -c "
+        # Make scripts executable
+        chmod +x /app/docker_helpers/*.sh
+        
+        # Setup Selenium
+        /app/docker_helpers/setup_selenium.sh
+        
+        # Run the direct scraper
+        python /app/docker_helpers/direct_scraper.py
+      "
