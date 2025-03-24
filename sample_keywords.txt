@@ -1,0 +1,16 @@
+python web scraping
+beautiful soup tutorial
+selenium automation
+web scraping best practices
+how to avoid being blocked when scraping
+requests vs selenium
+scraping javascript websites
+web scraping legal issues
+data extraction from websites
+web scraping with python
+parse html python
+web crawler python
+scraping dynamic content
+web scraping rate limiting
+beautifulsoup vs lxml
+web scraping proxy rotation 
