@@ -973,425 +973,146 @@ def create_forecast_chart(forecast_df):
     if forecast_df is None or len(forecast_df) == 0:
         return None
     
-    # Create plotly figure
-    fig = go.Figure()
-    
-    # Add historical sentiment line
-    historical_data = forecast_df[forecast_df['type'] == 'Historical']
-    forecast_data = forecast_df[forecast_df['type'] == 'Forecast']
-    
-    # Add historical sentiment line
-    fig.add_trace(go.Scatter(
-        x=historical_data['forecast_date'],
-        y=historical_data['sentiment'],
-        mode='lines+markers',
-        name='Historical Sentiment',
-        line=dict(color='royalblue')
-    ))
-    
-    # Add sentiment forecast line
-    fig.add_trace(go.Scatter(
-        x=forecast_data['forecast_date'],
-        y=forecast_data['sentiment'],
-        mode='lines+markers',
-        name='Forecasted Sentiment',
-        line=dict(color='firebrick', dash='dash')
-    ))
-    
-    # Add confidence interval if available
-    if 'lower_ci' in forecast_data.columns and 'upper_ci' in forecast_data.columns:
-        fig.add_trace(go.Scatter(
-            x=forecast_data['forecast_date'].tolist() + forecast_data['forecast_date'].tolist()[::-1],
-            y=forecast_data['upper_ci'].tolist() + forecast_data['lower_ci'].tolist()[::-1],
-            fill='toself',
-            fillcolor='rgba(231,107,243,0.2)',
-            line=dict(color='rgba(255,255,255,0)'),
-            showlegend=True,
-            name='95% Confidence Interval'
-        ))
-    
-    # Customize layout
-    fig.update_layout(
-        title="Sentiment Forecast Over Time",
-        xaxis_title="Month",
-        yaxis_title="Sentiment Score",
-        yaxis=dict(range=[-1, 1]),
-        template="plotly_white",
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
-    )
-    
-    return fig
-
-def create_topic_sentiment_chart(lda_model, topic_sentiments, num_topics=5):
-    """
-    Create chart showing topic sentiment (Feature 1)
-    """
-    if lda_model is None or not topic_sentiments:
-        return None
-    
-    # Get top terms for each topic
-    topic_terms = []
-    for i in range(num_topics):
-        terms = lda_model.show_topic(i, 5)
-        topic_label = f"Topic {i+1}: " + ", ".join(term for term, _ in terms)
-        topic_terms.append(topic_label)
-    
-    # Create data for chart
-    sentiment_values = [topic_sentiments.get(i, 0) for i in range(num_topics)]
-    
-    # Create figure
-    fig = px.bar(
-        x=topic_terms,
-        y=sentiment_values,
-        color=sentiment_values,
-        labels={
-            'x': 'Topic',
-            'y': 'Average Sentiment',
-            'color': 'Sentiment Score'
-        },
-        title='Sentiment Analysis by Topic',
-        color_continuous_scale=px.colors.diverging.RdBu,
-        color_continuous_midpoint=0
-    )
-    
-    # Update layout
-    fig.update_layout(
-        margin=dict(l=20, r=20, t=60, b=80),
-        xaxis_tickangle=-45
-    )
-    
-    return fig
-
-def create_wordcloud(texts, max_words=100, title=""):
-    """
-    Create a wordcloud from a list of texts
-    """
-    if not texts or all(pd.isna(text) for text in texts):
-        return None
-        
     try:
-        # Concatenate all texts
-        text = ' '.join([str(t) for t in texts if not pd.isna(t)])
+        # Create plotly figure
+        fig = go.Figure()
         
-        # Create wordcloud
-        wordcloud = WordCloud(
-            width=800, 
-            height=400,
-            max_words=max_words,
-            background_color='white',
-            colormap='viridis',
-            contour_width=1,
-            contour_color='steelblue'
-        ).generate(text)
+        # Historical data (has 'historical' column)
+        historical_mask = ~forecast_df['historical'].isna()
+        historical_data = forecast_df[historical_mask]
         
-        # Plot wordcloud
-        plt.figure(figsize=(10, 5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis('off')
-        plt.title(title)
+        # Forecast data (has 'forecast' column)
+        forecast_mask = ~forecast_df['forecast'].isna()
+        forecast_data = forecast_df[forecast_mask]
         
-        # Save to shorter, temporary file path to avoid Windows path length limitation
-        temp_dir = os.path.join(os.environ.get('TEMP', 'C:/temp'), 'nlp_dashboard')
-        os.makedirs(temp_dir, exist_ok=True)
-        filename = f"wordcloud_{title.replace(' ', '_').lower()}.png"
-        filepath = os.path.join(temp_dir, filename)
+        # Add historical sentiment line
+        if not historical_data.empty:
+            fig.add_trace(go.Scatter(
+                x=historical_data['date'],
+                y=historical_data['historical'],
+                mode='lines+markers',
+                name='Historical Sentiment',
+                line=dict(color='royalblue')
+            ))
         
-        plt.savefig(filepath)
-        plt.close()
+        # Add sentiment forecast line
+        if not forecast_data.empty:
+            fig.add_trace(go.Scatter(
+                x=forecast_data['date'],
+                y=forecast_data['forecast'],
+                mode='lines+markers',
+                name='Forecasted Sentiment',
+                line=dict(color='firebrick', dash='dash')
+            ))
         
-        return filepath
+            # Add confidence interval if available
+            if 'lower_ci' in forecast_data.columns and 'upper_ci' in forecast_data.columns:
+                fig.add_trace(go.Scatter(
+                    x=forecast_data['date'].tolist() + forecast_data['date'].tolist()[::-1],
+                    y=forecast_data['upper_ci'].tolist() + forecast_data['lower_ci'].tolist()[::-1],
+                    fill='toself',
+                    fillcolor='rgba(231,107,243,0.2)',
+                    line=dict(color='rgba(255,255,255,0)'),
+                    showlegend=True,
+                    name='95% Confidence Interval'
+                ))
         
+        # Customize layout
+        fig.update_layout(
+            title="Sentiment Forecast Over Time",
+            xaxis_title="Month",
+            yaxis_title="Sentiment Score",
+            yaxis=dict(range=[-1, 1]),
+            template="plotly_white",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        return fig
     except Exception as e:
-        print(f"Error creating wordcloud: {e}")
+        print(f"Error creating forecast chart: {e}")
         return None
 
-def plot_sentiment_over_time(df):
-    """Plot sentiment over time"""
-    # Group by date and calculate average sentiment
-    time_df = df.groupby(['year', 'month']).agg({
-        'overall_polarity': 'mean',
-        'positivity': 'mean',
-        'negativity': 'mean',
-        'id': 'count'
-    }).reset_index()
+def predict_sentiment_trends(df, periods=12):
+    """
+    Predict future sentiment trends using ARIMA model
     
-    # Create date column for plotting
-    time_df['date_str'] = time_df.apply(
-        lambda x: f"{int(x['year'])}-{int(x['month']):02d}", 
-        axis=1
-    )
+    Args:
+        df: DataFrame with sentiment analysis results
+        periods: Number of periods to forecast
+        
+    Returns:
+        DataFrame: DataFrame with forecasted sentiment values
+    """
+    if df.empty:
+        print("Empty DataFrame, cannot predict trends")
+        return None
     
-    # Create plotly figure
-    fig = go.Figure()
-    
-    # Add polarity line
-    fig.add_trace(go.Scatter(
-        x=time_df['date_str'],
-        y=time_df['overall_polarity'],
-        mode='lines+markers',
-        name='Overall Sentiment',
-        line=dict(color='blue', width=2),
-        marker=dict(size=8),
-    ))
-    
-    # Add positivity line
-    fig.add_trace(go.Scatter(
-        x=time_df['date_str'],
-        y=time_df['positivity'],
-        mode='lines+markers',
-        name='Positivity',
-        line=dict(color='green', width=2),
-        marker=dict(size=6),
-        visible='legendonly',
-    ))
-    
-    # Add negativity line
-    fig.add_trace(go.Scatter(
-        x=time_df['date_str'],
-        y=time_df['negativity'],
-        mode='lines+markers',
-        name='Negativity',
-        line=dict(color='red', width=2),
-        marker=dict(size=6),
-        visible='legendonly',
-    ))
-    
-    # Add article count bars
-    fig.add_trace(go.Bar(
-        x=time_df['date_str'],
-        y=time_df['id'],
-        name='Article Count',
-        marker_color='rgba(0, 128, 0, 0.3)',
-        yaxis='y2'
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        title='Sentiment Analysis Over Time',
-        xaxis=dict(title='Date'),
-        yaxis=dict(
-            title='Sentiment Score',
-            titlefont=dict(color='blue'),
-            tickfont=dict(color='blue'),
-            range=[-1, 1]
-        ),
-        yaxis2=dict(
-            title='Article Count',
-            titlefont=dict(color='green'),
-            tickfont=dict(color='green'),
-            anchor='x',
-            overlaying='y',
-            side='right'
-        ),
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='right',
-            x=1
-        ),
-        template='plotly_white'
-    )
-    
-    return fig
-
-def plot_sentiment_distribution(df):
-    """Plot distribution of sentiment categories"""
-    # Count sentiment categories
-    sentiment_counts = df['sentiment_category'].value_counts().reset_index()
-    sentiment_counts.columns = ['category', 'count']
-    
-    # Order categories
-    category_order = ['Negative', 'Neutral', 'Positive']
-    sentiment_counts['category'] = pd.Categorical(
-        sentiment_counts['category'], 
-        categories=category_order, 
-        ordered=True
-    )
-    sentiment_counts = sentiment_counts.sort_values('category')
-    
-    # Create colors for each category
-    colors = {'Negative': 'red', 'Neutral': 'gray', 'Positive': 'green'}
-    bar_colors = [colors[cat] for cat in sentiment_counts['category']]
-    
-    # Create figure
-    fig = px.bar(
-        sentiment_counts, 
-        x='category', 
-        y='count',
-        text='count',
-        color='category',
-        color_discrete_map=colors,
-        title='Distribution of Sentiment Categories'
-    )
-    
-    fig.update_layout(
-        xaxis_title='Sentiment Category',
-        yaxis_title='Count',
-        template='plotly_white'
-    )
-    
-    return fig
-
-def plot_type_sentiment(df):
-    """Plot sentiment by article type"""
-    # Group by type and calculate average sentiment
-    type_sentiment = df.groupby('type').agg({
-        'overall_polarity': 'mean',
-        'positivity': 'mean',
-        'negativity': 'mean',
-        'id': 'count'
-    }).reset_index()
-    
-    # Sort by count
-    type_sentiment = type_sentiment.sort_values('id', ascending=False)
-    
-    # Create figure
-    fig = go.Figure()
-    
-    # Add bars
-    fig.add_trace(go.Bar(
-        x=type_sentiment['type'],
-        y=type_sentiment['overall_polarity'],
-        marker_color=[
-            'green' if x > 0.1 else 'red' if x < -0.1 else 'gray'
-            for x in type_sentiment['overall_polarity']
-        ],
-        name='Overall Sentiment'
-    ))
-    
-    # Add positivity bars (stacked)
-    fig.add_trace(go.Bar(
-        x=type_sentiment['type'],
-        y=type_sentiment['positivity'],
-        marker_color='rgba(0, 128, 0, 0.6)',
-        name='Positivity',
-        visible='legendonly'
-    ))
-    
-    # Add negativity bars (stacked)
-    fig.add_trace(go.Bar(
-        x=type_sentiment['type'],
-        y=type_sentiment['negativity'],
-        marker_color='rgba(255, 0, 0, 0.6)',
-        name='Negativity',
-        visible='legendonly'
-    ))
-    
-    # Add article count line
-    fig.add_trace(go.Scatter(
-        x=type_sentiment['type'],
-        y=type_sentiment['id'],
-        mode='lines+markers',
-        name='Article Count',
-        yaxis='y2',
-        line=dict(color='blue', width=2),
-        marker=dict(size=8)
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        title='Sentiment Analysis by Article Type',
-        xaxis=dict(title='Article Type'),
-        yaxis=dict(
-            title='Sentiment Score',
-            range=[-1, 1]
-        ),
-        yaxis2=dict(
-            title='Article Count',
-            titlefont=dict(color='blue'),
-            tickfont=dict(color='blue'),
-            anchor='x',
-            overlaying='y',
-            side='right'
-        ),
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='right',
-            x=1
-        ),
-        template='plotly_white'
-    )
-    
-    return fig
-
-def plot_key_terms_impact(df):
-    """Plot impact of key terms on sentiment"""
-    # Extract key terms with their sentiment impact
-    all_terms = []
-    for _, row in df.iterrows():
-        for term in row['key_terms']:
-            all_terms.append({
-                'term': term[0],
-                'count': term[1],
-                'sentiment_impact': term[2]
-            })
-    
-    # Create DataFrame of terms
-    if not all_terms:
-        return go.Figure()  # Return empty figure if no terms
-    
-    terms_df = pd.DataFrame(all_terms)
-    
-    # Aggregate by term
-    terms_agg = terms_df.groupby('term').agg({
-        'count': 'sum',
-        'sentiment_impact': 'mean'
-    }).reset_index()
-    
-    # Sort by impact and count
-    terms_agg = terms_agg.sort_values(['count', 'sentiment_impact'], ascending=[False, False])
-    
-    # Take top terms
-    top_terms = terms_agg.head(15)
-    
-    # Create figure
-    fig = px.scatter(
-        top_terms,
-        x='sentiment_impact',
-        y='count',
-        text='term',
-        size='count',
-        color='sentiment_impact',
-        color_continuous_scale=['red', 'gray', 'green'],
-        range_color=[-2.5, 2.5],
-        title='Key Terms Impact on Sentiment',
-    )
-    
-    # Update layout
-    fig.update_traces(
-        textposition='top center',
-        marker=dict(sizemode='area', sizeref=0.1)
-    )
-    
-    fig.update_layout(
-        xaxis_title='Sentiment Impact',
-        yaxis_title='Frequency',
-        template='plotly_white'
-    )
-    
-    return fig
-
-def search_articles(df, keyword):
-    """Search articles containing the keyword"""
-    if not keyword:
-        return pd.DataFrame()
-    
-    # Search in title and content
-    mask = (
-        df['title'].str.contains(keyword, case=False, na=False) | 
-        df['content'].str.contains(keyword, case=False, na=False)
-    )
-    
-    return df[mask][['title', 'date', 'type', 'overall_polarity', 'sentiment_category']]
+    try:
+        # Group by month and calculate average sentiment
+        df['date'] = pd.to_datetime(df['date'])
+        monthly_df = df.groupby(pd.Grouper(key='date', freq='ME'))['overall_polarity'].mean().reset_index()
+        
+        # Ensure we have enough data points for forecasting
+        if len(monthly_df) < 5:
+            print("Not enough data points for forecasting")
+            return None
+        
+        # Set date as index
+        monthly_df = monthly_df.set_index('date')
+        
+        # Train ARIMA model
+        try:
+            model = ARIMA(monthly_df, order=(1, 1, 1), freq='ME')
+            model_fit = model.fit()
+        except Exception as e:
+            print(f"Error fitting ARIMA model: {e}")
+            # Try a simpler model
+            model = ARIMA(monthly_df, order=(1, 0, 0), freq='ME')
+            model_fit = model.fit()
+        
+        # Generate forecast with confidence intervals
+        forecast = model_fit.forecast(steps=periods)
+        
+        # Create forecast DataFrame with confidence intervals
+        forecast_index = pd.date_range(start=monthly_df.index[-1] + pd.DateOffset(months=1), periods=periods, freq='ME')
+        
+        # Create forecast DataFrame
+        forecast_df = pd.DataFrame({
+            'date': forecast_index,
+            'forecast': forecast
+        })
+        
+        # Set standard error to fixed value if not available
+        stderr = getattr(model_fit, 'stderr', 0.1)
+        
+        # Add confidence intervals
+        z = 1.96  # 95% confidence
+        forecast_df['lower_ci'] = forecast_df['forecast'] - z * stderr
+        forecast_df['upper_ci'] = forecast_df['forecast'] + z * stderr
+        
+        # Combine historical and forecast data
+        historical = monthly_df.reset_index().rename(columns={'overall_polarity': 'historical'})
+        
+        # Make sure the lengths match before comparison
+        if not historical.empty and not forecast_df.empty:
+            # Ensure no overlap between historical and forecast
+            forecast_df = forecast_df[forecast_df['date'] > historical['date'].max()]
+            
+            # Combine historical and forecast
+            result = pd.concat([historical, forecast_df], sort=False)
+            return result
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error in ARIMA forecasting: {e}")
+        return None
 
 def create_dashboard():
     """Create the dashboard interface using Gradio"""
@@ -1416,8 +1137,11 @@ def create_dashboard():
     negative_count = sentiment_counts.get('Negative', 0)
     
     # Create positive and negative wordclouds
-    positive_wordcloud = create_wordcloud(df, 'Positive')
-    negative_wordcloud = create_wordcloud(df, 'Negative')
+    positive_texts = df[df['sentiment_category'] == 'Positive']['content'].dropna().tolist()
+    positive_wordcloud = create_wordcloud(positive_texts, title="Positive")
+    
+    negative_texts = df[df['sentiment_category'] == 'Negative']['content'].dropna().tolist()
+    negative_wordcloud = create_wordcloud(negative_texts, title="Negative")
     
     # Topic model chart
     topic_chart = create_topic_sentiment_chart(lda_model, topic_sentiments)
@@ -1971,6 +1695,163 @@ def update_charts(year_range, source, sentiment, topic, entity):
     events_corr_chart = create_temporal_event_correlation(filtered_df)
     
     return sentiment_time_chart, source_sentiment_chart, topics_dist_chart, entities_chart, events_corr_chart
+
+def create_topic_distribution_chart(df):
+    """
+    Create a chart showing the distribution of topics in the data
+    
+    Args:
+        df: DataFrame with topic modeling results
+        
+    Returns:
+        Figure: Plotly figure with topic distribution
+    """
+    if 'main_topic' not in df.columns or df['main_topic'].isnull().all():
+        return None
+    
+    try:
+        # Count documents by topic
+        topic_counts = df['main_topic'].value_counts().reset_index()
+        topic_counts.columns = ['Topic', 'Count']
+        topic_counts['Topic'] = topic_counts['Topic'].apply(lambda x: f'Topic {x+1}')
+        
+        # Create bar chart
+        fig = px.bar(
+            topic_counts, 
+            x='Topic', 
+            y='Count',
+            title="Document Distribution by Topic",
+            color='Count',
+            color_continuous_scale='Viridis'
+        )
+        
+        fig.update_layout(
+            xaxis_title="Topic",
+            yaxis_title="Number of Documents",
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(size=12)
+        )
+        
+        return fig
+    except Exception as e:
+        print(f"Error creating topic distribution chart: {e}")
+        return None
+
+def create_entity_chart(df):
+    """
+    Create a chart showing the top named entities in the data
+    
+    Args:
+        df: DataFrame with named entities extraction results
+        
+    Returns:
+        Figure: Plotly figure with entity counts
+    """
+    if 'named_entities' not in df.columns or df['named_entities'].isnull().all():
+        return None
+    
+    try:
+        # Extract all entities and their counts
+        entity_counts = {}
+        for entities in df['named_entities'].dropna():
+            for entity in entities:
+                if entity and 'text' in entity:
+                    entity_text = entity.get('text', '')
+                    entity_counts[entity_text] = entity_counts.get(entity_text, 0) + 1
+        
+        # Get top 15 entities
+        top_entities = sorted(entity_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+        entity_df = pd.DataFrame(top_entities, columns=['Entity', 'Count'])
+        
+        # Create horizontal bar chart
+        fig = px.bar(
+            entity_df, 
+            y='Entity', 
+            x='Count',
+            title="Top Named Entities",
+            color='Count',
+            color_continuous_scale='Viridis',
+            orientation='h'
+        )
+        
+        fig.update_layout(
+            xaxis_title="Count",
+            yaxis_title="Entity",
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(size=12),
+            yaxis={'categoryorder':'total ascending'}
+        )
+        
+        return fig
+    except Exception as e:
+        print(f"Error creating entity chart: {e}")
+        return None
+
+def create_wordcloud(texts_or_df, max_words=100, title=""):
+    """
+    Create a wordcloud from a list of texts or DataFrame
+    
+    Args:
+        texts_or_df: Either a list of text strings or a DataFrame with 'content' and 'sentiment_category' columns
+        max_words: Maximum number of words to include in the wordcloud
+        title: Title for the wordcloud image
+        
+    Returns:
+        str: Path to the generated wordcloud image or None if no text is available
+    """
+    # Handle DataFrame input (backward compatibility)
+    if isinstance(texts_or_df, pd.DataFrame):
+        if title in ['Positive', 'Negative', 'Neutral']:
+            # Filter by sentiment category
+            texts = texts_or_df[texts_or_df['sentiment_category'] == title]['content'].dropna().tolist()
+        else:
+            # Use all content
+            texts = texts_or_df['content'].dropna().tolist()
+    else:
+        # Already a list of texts
+        texts = texts_or_df
+    
+    if not texts or len(texts) == 0 or all(pd.isna(text) for text in texts):
+        print(f"No text available for wordcloud: {title}")
+        return None
+        
+    try:
+        # Concatenate all texts
+        text = ' '.join([str(t) for t in texts if not pd.isna(t)])
+        
+        # Create wordcloud
+        wordcloud = WordCloud(
+            width=800, 
+            height=400,
+            max_words=max_words,
+            background_color='white',
+            colormap='viridis',
+            contour_width=1,
+            contour_color='steelblue'
+        ).generate(text)
+        
+        # Plot wordcloud
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.title(title)
+        
+        # Save to shorter, temporary file path to avoid Windows path length limitation
+        temp_dir = os.path.join(os.environ.get('TEMP', 'C:/temp'), 'nlp_dashboard')
+        os.makedirs(temp_dir, exist_ok=True)
+        filename = f"wordcloud_{title.replace(' ', '_').lower()}.png"
+        filepath = os.path.join(temp_dir, filename)
+        
+        plt.savefig(filepath)
+        plt.close()
+        
+        return filepath
+        
+    except Exception as e:
+        print(f"Error creating wordcloud: {e}")
+        return None
 
 if __name__ == "__main__":
     dashboard = create_dashboard()
